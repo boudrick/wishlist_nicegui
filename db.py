@@ -7,9 +7,6 @@ from contextlib import contextmanager
 DB_PATH = Path('wishlist.db')
 
 
-# ============================================================
-# Sécurité — mots de passe
-# ============================================================
 def hash_password(password, salt=None):
     if salt is None:
         salt = secrets.token_hex(16)
@@ -25,9 +22,6 @@ def verify_password(password, stored):
     return hash_password(password, salt) == stored
 
 
-# ============================================================
-# Connexion
-# ============================================================
 @contextmanager
 def connection():
     conn = sqlite3.connect(DB_PATH)
@@ -43,14 +37,10 @@ def connection():
         conn.close()
 
 
-# ============================================================
-# Initialisation / migrations
-# ============================================================
 def init_db():
     with connection() as conn:
         c = conn.cursor()
 
-        # --- Tables ---
         c.execute('''CREATE TABLE IF NOT EXISTS wishlists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -70,6 +60,7 @@ def init_db():
             description TEXT,
             image_url TEXT,
             category_id INTEGER,
+            position INTEGER DEFAULT 0,
             FOREIGN KEY (wishlist_id) REFERENCES wishlists(id)
                 ON DELETE CASCADE
         )''')
@@ -91,7 +82,6 @@ def init_db():
                 ON DELETE CASCADE
         )''')
 
-        # --- Migrations de colonnes ---
         def has_column(table, column):
             c.execute(f"PRAGMA table_info({table})")
             return any(row[1] == column for row in c.fetchall())
@@ -108,7 +98,22 @@ def init_db():
         if not has_column('items', 'category_id'):
             c.execute('ALTER TABLE items ADD COLUMN category_id INTEGER')
 
-        # --- Migration des anciens items.url / items.price vers item_links ---
+        # --- Nouvelle colonne position sur items ---
+        if not has_column('items', 'position'):
+            c.execute(
+                'ALTER TABLE items ADD COLUMN position INTEGER DEFAULT 0')
+            # Initialise les positions par (wishlist, catégorie) selon l'id
+            rows = c.execute(
+                'SELECT id, wishlist_id, category_id FROM items '
+                'ORDER BY wishlist_id, category_id, id').fetchall()
+            counters = {}
+            for r in rows:
+                key = (r[1], r[2])
+                counters[key] = counters.get(key, 0) + 1
+                c.execute('UPDATE items SET position=? WHERE id=?',
+                          (counters[key], r[0]))
+
+        # Migration items.url/price → item_links
         if (has_column('items', 'url')
                 or has_column('items', 'price')):
             c.execute('''SELECT id, url, price FROM items
@@ -176,7 +181,6 @@ def delete_wishlist(wid):
 
 
 def get_item_counts():
-    """Retourne {wishlist_id: nombre d'items} pour toutes les wishlists."""
     with connection() as conn:
         return {r['wishlist_id']: r['c'] for r in conn.execute(
             'SELECT wishlist_id, COUNT(*) AS c FROM items '
@@ -195,9 +199,14 @@ def get_categories(wid):
 
 def create_category(wid, name):
     with connection() as conn:
+        row = conn.execute(
+            'SELECT MAX(position) AS p FROM categories WHERE wishlist_id=?',
+            (wid,)).fetchone()
+        pos = (row['p'] or 0) + 1
         cur = conn.execute(
-            'INSERT INTO categories (wishlist_id, name) VALUES (?,?)',
-            (wid, name))
+            'INSERT INTO categories (wishlist_id, name, position) '
+            'VALUES (?,?,?)',
+            (wid, name, pos))
         return cur.lastrowid
 
 
@@ -208,14 +217,42 @@ def delete_category(cid):
         conn.execute('DELETE FROM categories WHERE id=?', (cid,))
 
 
+def swap_category_position(cid, direction):
+    """Échange la position avec le voisin précédent ('up') ou suivant ('down')."""
+    with connection() as conn:
+        row = conn.execute(
+            'SELECT * FROM categories WHERE id=?', (cid,)).fetchone()
+        if not row:
+            return
+        wid = row['wishlist_id']
+        cur_pos = row['position'] or 0
+        if direction == 'up':
+            nb = conn.execute(
+                'SELECT * FROM categories '
+                'WHERE wishlist_id=? AND position < ? '
+                'ORDER BY position DESC LIMIT 1',
+                (wid, cur_pos)).fetchone()
+        else:
+            nb = conn.execute(
+                'SELECT * FROM categories '
+                'WHERE wishlist_id=? AND position > ? '
+                'ORDER BY position ASC LIMIT 1',
+                (wid, cur_pos)).fetchone()
+        if nb:
+            conn.execute('UPDATE categories SET position=? WHERE id=?',
+                         (nb['position'], cid))
+            conn.execute('UPDATE categories SET position=? WHERE id=?',
+                         (cur_pos, nb['id']))
+
+
 # ============================================================
 # Items
 # ============================================================
 def get_items_with_links(wid):
     with connection() as conn:
         items = [dict(r) for r in conn.execute(
-            'SELECT * FROM items WHERE wishlist_id=? ORDER BY id DESC',
-            (wid,))]
+            'SELECT * FROM items WHERE wishlist_id=? '
+            'ORDER BY position, id', (wid,))]
         for it in items:
             it['links'] = [dict(r) for r in conn.execute(
                 'SELECT * FROM item_links WHERE item_id=? '
@@ -226,11 +263,24 @@ def get_items_with_links(wid):
 def create_item(wishlist_id, name, description, image_url,
                 category_id, links):
     with connection() as conn:
+        if category_id:
+            row = conn.execute(
+                'SELECT MAX(position) AS p FROM items '
+                'WHERE wishlist_id=? AND category_id=?',
+                (wishlist_id, category_id)).fetchone()
+        else:
+            row = conn.execute(
+                'SELECT MAX(position) AS p FROM items '
+                'WHERE wishlist_id=? AND category_id IS NULL',
+                (wishlist_id,)).fetchone()
+        pos = (row['p'] or 0) + 1
         cur = conn.execute(
             'INSERT INTO items '
-            '(wishlist_id, name, description, image_url, category_id) '
-            'VALUES (?,?,?,?,?)',
-            (wishlist_id, name, description, image_url, category_id))
+            '(wishlist_id, name, description, image_url, '
+            'category_id, position) '
+            'VALUES (?,?,?,?,?,?)',
+            (wishlist_id, name, description, image_url,
+             category_id, pos))
         item_id = cur.lastrowid
         for link in links:
             if link.get('url'):
@@ -242,6 +292,90 @@ def create_item(wishlist_id, name, description, image_url,
         return item_id
 
 
+def update_item(item_id, name, description, image_url,
+                category_id, links):
+    with connection() as conn:
+        old = conn.execute(
+            'SELECT * FROM items WHERE id=?', (item_id,)).fetchone()
+        if not old:
+            return
+        # Si la catégorie change, on place l'item à la fin de la nouvelle
+        if (old['category_id'] or 0) != (category_id or 0):
+            if category_id:
+                row = conn.execute(
+                    'SELECT MAX(position) AS p FROM items '
+                    'WHERE wishlist_id=? AND category_id=?',
+                    (old['wishlist_id'], category_id)).fetchone()
+            else:
+                row = conn.execute(
+                    'SELECT MAX(position) AS p FROM items '
+                    'WHERE wishlist_id=? AND category_id IS NULL',
+                    (old['wishlist_id'],)).fetchone()
+            new_pos = (row['p'] or 0) + 1
+        else:
+            new_pos = old['position'] or 0
+
+        conn.execute(
+            'UPDATE items SET name=?, description=?, image_url=?, '
+            'category_id=?, position=? WHERE id=?',
+            (name, description, image_url, category_id, new_pos, item_id))
+        conn.execute('DELETE FROM item_links WHERE item_id=?', (item_id,))
+        for link in links:
+            if link.get('url'):
+                conn.execute(
+                    'INSERT INTO item_links (item_id, site, url, price) '
+                    'VALUES (?,?,?,?)',
+                    (item_id, link.get('site'), link['url'],
+                     link.get('price')))
+
+
 def delete_item(item_id):
     with connection() as conn:
         conn.execute('DELETE FROM items WHERE id=?', (item_id,))
+
+
+def swap_item_position(item_id, direction):
+    """Échange la position avec le voisin dans la même catégorie."""
+    with connection() as conn:
+        row = conn.execute(
+            'SELECT * FROM items WHERE id=?', (item_id,)).fetchone()
+        if not row:
+            return
+        wid = row['wishlist_id']
+        cat_id = row['category_id']
+        cur_pos = row['position'] or 0
+
+        if cat_id:
+            if direction == 'up':
+                nb = conn.execute(
+                    'SELECT * FROM items '
+                    'WHERE wishlist_id=? AND category_id=? AND position < ? '
+                    'ORDER BY position DESC LIMIT 1',
+                    (wid, cat_id, cur_pos)).fetchone()
+            else:
+                nb = conn.execute(
+                    'SELECT * FROM items '
+                    'WHERE wishlist_id=? AND category_id=? AND position > ? '
+                    'ORDER BY position ASC LIMIT 1',
+                    (wid, cat_id, cur_pos)).fetchone()
+        else:
+            if direction == 'up':
+                nb = conn.execute(
+                    'SELECT * FROM items '
+                    'WHERE wishlist_id=? AND category_id IS NULL '
+                    'AND position < ? '
+                    'ORDER BY position DESC LIMIT 1',
+                    (wid, cur_pos)).fetchone()
+            else:
+                nb = conn.execute(
+                    'SELECT * FROM items '
+                    'WHERE wishlist_id=? AND category_id IS NULL '
+                    'AND position > ? '
+                    'ORDER BY position ASC LIMIT 1',
+                    (wid, cur_pos)).fetchone()
+
+        if nb:
+            conn.execute('UPDATE items SET position=? WHERE id=?',
+                         (nb['position'], item_id))
+            conn.execute('UPDATE items SET position=? WHERE id=?',
+                         (cur_pos, nb['id']))

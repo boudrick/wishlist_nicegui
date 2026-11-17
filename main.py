@@ -5,7 +5,9 @@ from db import (
     get_wishlists, get_wishlist, create_wishlist, update_wishlist,
     delete_wishlist, set_wishlist_password,
     get_categories, create_category, delete_category,
-    get_items_with_links, create_item, delete_item, get_item_counts,
+    swap_category_position,
+    get_items_with_links, create_item, update_item, delete_item,
+    swap_item_position, get_item_counts,
 )
 from theme import (
     apply_theme, page_container, apply_gradient,
@@ -32,14 +34,44 @@ def wishlist_emoji(w):
 
 
 # ============================================================
-# Emoji picker
+# Emoji picker — palette complète par catégories
 # ============================================================
-EMOJIS = [
-    '🎁', '🎄', '🎂', '🎉', '🎈', '💝', '🧸', '🎮',
-    '📚', '👕', '🍳', '🎵', '📷', '🎧', '💻', '✈️',
-    '🏠', '🌱', '🎨', '🏋️', '🍷', '🌍', '💍', '🐶',
-    '🐱', '⭐', '🎯', '🎬', '🏀', '🌻',
-]
+EMOJI_GROUPS = {
+    'Fêtes': ['🎁', '🎄', '🎅', '🎆', '🎇', '🎉', '🎊', '🎈',
+              '🎂', '🥳', '🕯️', '🎃', '🥂', '🎀', '🪅'],
+    'Amour': ['💝', '💖', '💗', '💓', '💞', '💕', '❤️', '🧡',
+              '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔',
+              '💌', '💍', '💐', '🌹'],
+    'Loisirs': ['🎮', '🎲', '🎯', '🎨', '🎭', '🎬', '🎤', '🎧',
+                '🎼', '🎵', '🎶', '🎸', '🎹', '🥁', '🎺', '🎻',
+                '🎷', '📯'],
+    'Sport': ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏉', '🎱',
+              '🏓', '🏸', '🥊', '🏋️', '🚴', '🏊', '🧘', '⛹️',
+              '🤸', '🏂', '⛷️', '🏄'],
+    'Tech': ['📱', '💻', '🖥️', '⌨️', '🖱️', '📷', '📹', '🎥',
+             '📺', '📻', '🎙️', '⌚', '🕹️', '💾', '💿', '📀'],
+    'Livres': ['📚', '📖', '📕', '📗', '📘', '📙', '📓', '📔',
+               '📒', '📝', '✏️', '🖊️', '🖋️', '🖌️', '🖍️'],
+    'Vêtements': ['👕', '👖', '👗', '👘', '👙', '👚', '👔', '👞',
+                  '👟', '👠', '👢', '👒', '🎩', '🧢', '🧣', '🧤',
+                  '🧦', '👜', '👛', '👝'],
+    'Cuisine': ['🍳', '🍴', '🥄', '🍽️', '🍶', '🍷', '🍸', '🍺',
+                '🍻', '☕', '🍵', '🧉', '🍾', '🥃', '🍹', '🥤'],
+    'Maison': ['🏠', '🛋️', '🛏️', '🚪', '🪑', '🛁', '🚿', '🧴',
+               '🧻', '🖼️', '🪞', '🪴', '🧹'],
+    'Voyage': ['✈️', '🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓',
+               '🚑', '🚒', '🚐', '🚁', '🚂', '🚆', '🚢', '⛵',
+               '🚀', '🛸', '🗺️', '🧳'],
+    'Animaux': ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼',
+                '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔',
+                '🐧', '🦅', '🦉', '🦄'],
+    'Nature': ['🌱', '🌿', '🍀', '🌵', '🌴', '🌲', '🌳', '🌷',
+               '🌸', '🌺', '🌻', '🌼', '🌈', '☀️', '⭐', '🌟',
+               '🌙', '☁️', '⛅', '🌊'],
+    'Divers': ['💎', '🎓', '🏆', '🥇', '🥈', '🥉', '🎗️', '🏅',
+               '🧸', '🎏', '🪩', '🔑', '💡', '🧭', '🔮', '🎰',
+               '🎪', '🛍️', '🎴', '🃏'],
+}
 
 
 def emoji_picker(initial='🎁'):
@@ -61,17 +93,26 @@ def emoji_picker(initial='🎁'):
 
     def render():
         buttons.clear()
-        with ui.row().classes('gap-1 flex-wrap'):
-            for e in EMOJIS:
-                btn = ui.element('div').classes(
-                    'cursor-pointer rounded-lg w-10 h-10 flex '
-                    'items-center justify-center text-2xl '
-                    'hover:bg-slate-100 ring-2 ring-transparent'
-                )
-                btn.on('click', lambda x=e: select(x))
-                with btn:
-                    ui.label(e)
-                buttons[e] = btn
+        with ui.column().classes(
+            'gap-3 w-full max-h-64 overflow-y-auto pr-2 '
+            'border border-slate-200 rounded-lg p-3'
+        ):
+            for group_name, emojis in EMOJI_GROUPS.items():
+                lbl = ui.label(group_name).classes(
+                    'text-xs font-semibold uppercase tracking-wide')
+                lbl.style('color: #94a3b8 !important;')
+                with ui.row().classes('gap-1 flex-wrap'):
+                    for e in emojis:
+                        btn = ui.element('div').classes(
+                            'cursor-pointer rounded-lg w-9 h-9 '
+                            'flex items-center justify-center '
+                            'text-xl hover:bg-slate-100 '
+                            'ring-2 ring-transparent'
+                        )
+                        btn.on('click', lambda x=e: select(x))
+                        with btn:
+                            ui.label(e)
+                        buttons[e] = btn
         _highlight()
 
     def get_value():
@@ -81,7 +122,7 @@ def emoji_picker(initial='🎁'):
 
 
 # ============================================================
-# Header (uniquement page /add et erreurs)
+# Header (page /add + erreurs)
 # ============================================================
 def render_header(title='Listes de cadeaux', back_url=None,
                   action_builder=None, header_color=None):
@@ -223,6 +264,102 @@ def color_picker(initial='indigo'):
 
 
 # ============================================================
+# Formulaire item partagé (ajout + édition)
+# ============================================================
+def build_item_fields(item=None, categories=None):
+    item = item or {}
+    categories = categories or []
+
+    name = ui.input('Nom du cadeau',
+                    value=item.get('name', ''),
+                    placeholder='Ex. Casque audio') \
+        .props('outlined rounded').classes('w-full')
+    description = ui.textarea('Description (optionnel)',
+                              value=item.get('description') or '') \
+        .props('outlined rounded autogrow').classes('w-full mt-3')
+    image_url = ui.input("URL de l'image (optionnel)",
+                         value=item.get('image_url') or '',
+                         placeholder='https://...') \
+        .props('outlined rounded').classes('w-full mt-3')
+
+    cat_options = {0: 'Sans catégorie'}
+    for c in categories:
+        cat_options[c['id']] = c['name']
+    initial_cat = item.get('category_id') or 0
+    if initial_cat not in cat_options:
+        initial_cat = 0
+    category_select = ui.select(
+        cat_options, value=initial_cat, label='Catégorie',
+    ).props('outlined rounded').classes('w-full mt-3')
+
+    ui.separator().classes('my-4')
+    l = ui.label('Liens (site · URL · prix)').classes(
+        'text-sm font-semibold mb-2')
+    l.style('color: #334155 !important;')
+
+    links_container = ui.column().classes('w-full gap-3')
+    link_rows = []
+
+    def add_link_row(site_val='', url_val='', price_val=None):
+        with links_container:
+            with ui.row().classes(
+                'w-full items-center gap-2 no-wrap'
+            ) as row:
+                site = ui.input('Site', value=site_val,
+                                placeholder='Amazon') \
+                    .props('outlined rounded dense').classes('w-32')
+                url = ui.input('URL', value=url_val,
+                               placeholder='https://...') \
+                    .props('outlined rounded dense').classes('flex-1')
+                price = ui.number('Prix (€)', value=price_val,
+                                  format='%.2f') \
+                    .props('outlined rounded dense').classes('w-28')
+
+                entry = {'site': site, 'url': url, 'price': price}
+
+                def remove(e=entry, r=row):
+                    if e in link_rows:
+                        link_rows.remove(e)
+                    r.delete()
+
+                ui.button(icon='delete', on_click=remove) \
+                    .props('flat round color=negative size=sm')
+            link_rows.append(entry)
+
+    existing = item.get('links') or []
+    if existing:
+        for ln in existing:
+            add_link_row(ln.get('site') or '',
+                         ln.get('url') or '',
+                         ln.get('price'))
+    else:
+        add_link_row()
+
+    ui.button('Ajouter un autre lien', icon='add',
+              on_click=lambda: add_link_row()) \
+        .props('flat rounded-lg color=primary no-caps').classes('mt-2')
+
+    def get_values():
+        links = [
+            {'site': e['site'].value.strip() or None,
+             'url': e['url'].value.strip(),
+             'price': e['price'].value}
+            for e in link_rows
+            if e['url'].value and e['url'].value.strip()
+        ]
+        return {
+            'name': (name.value or '').strip(),
+            'description': (description.value or '').strip() or None,
+            'image_url': (image_url.value or '').strip() or None,
+            'category_id': category_select.value
+            if category_select.value else None,
+            'links': links,
+        }
+
+    return get_values
+
+
+# ============================================================
 # Page d'accueil
 # ============================================================
 @ui.page('/')
@@ -237,7 +374,6 @@ def home():
         ui.navigate.to('/')
 
     with page_container():
-        # --- Titre à gauche, boutons à droite ---
         with ui.row().classes(
             'w-full items-center justify-between mt-4 mb-2'
         ):
@@ -299,7 +435,6 @@ def render_wishlist_card(w, item_count):
                 _open_wishlist(wid, url, internal))
 
     with card:
-        # Bandeau : emoji + titre
         band = ui.element('div').classes(
             'px-5 py-6 flex items-center gap-3'
         )
@@ -311,7 +446,6 @@ def render_wishlist_card(w, item_count):
                 'text-lg font-bold line-clamp-1 min-w-0 flex-1')
             t.style('color: #ffffff !important;')
 
-        # Footer
         with ui.column().classes('p-4 flex-1 justify-end'):
             with ui.row().classes(
                 'w-full items-center justify-between'
@@ -331,7 +465,7 @@ def render_wishlist_card(w, item_count):
 
 
 # ============================================================
-# Création d'une liste
+# Création d'une liste — couleur avant type
 # ============================================================
 @ui.page('/add')
 def add_page():
@@ -361,10 +495,18 @@ def add_page():
 
             ui.separator().classes('my-6')
 
-            # Emoji
+            # --- Emoji ---
             lb_e = ui.label('Émoji').classes('text-sm font-semibold mb-2')
             lb_e.style('color: #334155 !important;')
             render_emoji()
+
+            ui.separator().classes('my-6')
+
+            # --- Couleur AVANT le type ---
+            lb2 = ui.label('Couleur de la liste').classes(
+                'text-sm font-semibold mb-3')
+            lb2.style('color: #334155 !important;')
+            render_picker()
 
             ui.separator().classes('my-6')
             lb = ui.label('Type de liste').classes(
@@ -382,12 +524,6 @@ def add_page():
             wtype.on_value_change(
                 lambda e: url_input.set_visibility(
                     e.value == 'external'))
-
-            ui.separator().classes('my-6')
-            lb2 = ui.label('Couleur de la liste').classes(
-                'text-sm font-semibold mb-3')
-            lb2.style('color: #334155 !important;')
-            render_picker()
 
             ui.separator().classes('my-6')
             with ui.row().classes('items-center gap-2'):
@@ -481,7 +617,6 @@ def wishlist_page(wid: int):
                 s.style('color: #64748b !important;')
         return
 
-    # --- Fond uni teinté sur toute la page (sans bordure blanche) ---
     color = w.get('color') or 'indigo'
     ui.query('.q-page').style(
         'padding: 0 !important; background: transparent !important;')
@@ -533,7 +668,7 @@ def wishlist_page(wid: int):
 
     async def edit_wishlist_dialog():
         with ui.dialog() as dialog, ui.card().classes(
-            'w-[480px] p-6 rounded-2xl'
+            'w-[520px] p-6 rounded-2xl max-h-[90vh] overflow-y-auto'
         ):
             t0 = ui.label('Modifier la liste').classes(
                 'text-lg font-bold mb-4')
@@ -639,11 +774,19 @@ def wishlist_page(wid: int):
             page_body.refresh()
             ui.notify('Catégorie supprimée.', type='info')
 
+        def move_cat(cid, direction):
+            swap_category_position(cid, direction)
+            page_body.refresh()
+
+        def move_item(item_id, direction):
+            swap_item_position(item_id, direction)
+            page_body.refresh()
+
         with ui.element('div').classes('w-full min-h-screen').style(
             f'background-color: {light_bg(color, "20")} !important;'
         ):
             with page_container():
-                # --- Barre : Accueil (gauche) + Mode édition (droite) ---
+                # --- Barre Accueil + Mode édition ---
                 with ui.row().classes(
                     'w-full items-center justify-between'
                 ):
@@ -653,7 +796,7 @@ def wishlist_page(wid: int):
                     back.style(f'color: {c_solid} !important;')
                     admin_button()
 
-                # --- Box titre + description (fond coloré) ---
+                # --- Box titre + description ---
                 with ui.element('div').classes(
                     'p-6 md:p-8 rounded-2xl w-full'
                 ).style(
@@ -681,26 +824,46 @@ def wishlist_page(wid: int):
                                       on_click=edit_wishlist_dialog) \
                                 .props('flat round color=primary')
 
-                # --- Catégories (admin) ---
+                # --- Catégories (admin) avec flèches ---
                 if is_admin:
                     with ui.element('div').classes('soft-card p-6'):
                         ct = ui.label('Catégories').classes(
                             'text-lg font-bold mb-3')
                         ct.style('color: #1e293b !important;')
                         if categories:
-                            with ui.row().classes(
-                                'gap-2 flex-wrap mb-3'
+                            with ui.column().classes(
+                                'w-full gap-2 mb-3'
                             ):
-                                for cat in categories:
-                                    with ui.element('div').classes(
-                                        'bg-indigo-50 text-indigo-700 '
-                                        'px-3 py-1 rounded-full '
-                                        'flex items-center gap-1'
+                                n = len(categories)
+                                for idx, cat in enumerate(categories):
+                                    with ui.row().classes(
+                                        'w-full items-center gap-2 '
+                                        'bg-indigo-50 rounded-lg '
+                                        'px-3 py-2'
                                     ):
                                         cl = ui.label(cat['name']) \
-                                            .classes('text-sm font-medium')
+                                            .classes(
+                                                'text-sm font-medium flex-1')
                                         cl.style(
                                             'color: #4338ca !important;')
+                                        b_up = ui.button(
+                                            icon='arrow_upward',
+                                            on_click=lambda cid=cat['id']:
+                                                move_cat(cid, 'up'))
+                                        b_up.props(
+                                            'flat round dense '
+                                            'color=primary size=xs')
+                                        if idx == 0:
+                                            b_up.set_enabled(False)
+                                        b_dn = ui.button(
+                                            icon='arrow_downward',
+                                            on_click=lambda cid=cat['id']:
+                                                move_cat(cid, 'down'))
+                                        b_dn.props(
+                                            'flat round dense '
+                                            'color=primary size=xs')
+                                        if idx == n - 1:
+                                            b_dn.set_enabled(False)
                                         ui.button(
                                             icon='close',
                                             on_click=lambda cid=cat['id']:
@@ -720,7 +883,7 @@ def wishlist_page(wid: int):
                                 .props('unelevated rounded-lg '
                                        'color=primary')
 
-                # --- "Mes envies" + badge édition ---
+                # --- "Mes envies" ---
                 with ui.row().classes(
                     'w-full items-center justify-between mt-2'
                 ):
@@ -757,7 +920,8 @@ def wishlist_page(wid: int):
                                 'tracking-wide mt-2')
                             h.style(f'color: {c_solid} !important;')
                         render_items_grid(by_cat[None], is_admin,
-                                          page_body.refresh, color)
+                                          page_body.refresh, color,
+                                          categories, move_item, wid)
                     for cat in categories:
                         cat_items = by_cat.get(cat['id'], [])
                         if not cat_items:
@@ -767,7 +931,8 @@ def wishlist_page(wid: int):
                             'tracking-wide mt-4')
                         h.style(f'color: {c_solid} !important;')
                         render_items_grid(cat_items, is_admin,
-                                          page_body.refresh, color)
+                                          page_body.refresh, color,
+                                          categories, move_item, wid)
 
                 if is_admin:
                     render_add_item_form(wid, categories,
@@ -777,18 +942,56 @@ def wishlist_page(wid: int):
 
 
 # ============================================================
-# Grille + Item (dégradé radial)
+# Dialog édition item
 # ============================================================
-def render_items_grid(items, is_admin, refresh_fn, color):
+async def open_edit_item_dialog(item, categories, refresh_fn):
+    with ui.dialog() as dialog, ui.card().classes(
+        'w-[620px] p-6 rounded-2xl max-h-[90vh] overflow-y-auto'
+    ):
+        lbl = ui.label('Modifier le cadeau').classes(
+            'text-lg font-bold mb-4')
+        lbl.style('color: #1e293b !important;')
+
+        get_values = build_item_fields(item=item, categories=categories)
+
+        def save():
+            v = get_values()
+            if not v['name']:
+                ui.notify('Nom requis', type='negative')
+                return
+            update_item(item['id'], v['name'], v['description'],
+                        v['image_url'], v['category_id'], v['links'])
+            dialog.submit(True)
+
+        with ui.row().classes('w-full justify-end gap-2 mt-4'):
+            ui.button('Annuler',
+                      on_click=lambda: dialog.submit(None)) \
+                .props('flat rounded-lg color=grey-7')
+            ui.button('Enregistrer', icon='check', on_click=save) \
+                .props('unelevated rounded-lg color=primary')
+
+    if await dialog:
+        refresh_fn()
+        ui.notify('Cadeau modifié.', type='positive')
+
+
+# ============================================================
+# Grille + Item
+# ============================================================
+def render_items_grid(items, is_admin, refresh_fn, color,
+                      categories, move_item, wid):
     with ui.element('div').classes(
         'grid grid-cols-1 lg:grid-cols-2 gap-4 w-full auto-rows-fr'
     ):
-        for it in items:
-            render_item(it, is_admin, refresh_fn, color)
+        for idx, it in enumerate(items):
+            is_first = idx == 0
+            is_last = idx == len(items) - 1
+            render_item(it, is_admin, refresh_fn, color,
+                        categories, move_item, is_first, is_last)
 
 
-def render_item(it, is_admin, refresh_fn, color):
-    # Dégradé radial : plus coloré au centre, plus clair sur les bords
+def render_item(it, is_admin, refresh_fn, color,
+                categories, move_item, is_first, is_last):
     item_bg = (
         f'radial-gradient(circle at center, '
         f'{light_bg(color, "90")} 0%, '
@@ -824,17 +1027,38 @@ def render_item(it, is_admin, refresh_fn, color):
                     'text-base font-bold break-words leading-tight')
                 t.style('color: #1e293b !important;')
                 if is_admin:
-                    ui.button(
-                        icon='delete',
-                        on_click=lambda i=it['id']:
-                            _delete_and_refresh(i, refresh_fn),
-                    ).props('flat round color=negative size=xs')
+                    with ui.row().classes('gap-0 flex-shrink-0'):
+                        b_up = ui.button(
+                            icon='arrow_upward',
+                            on_click=lambda i=it['id']:
+                                move_item(i, 'up'))
+                        b_up.props('flat round color=primary size=xs')
+                        if is_first:
+                            b_up.set_enabled(False)
+                        b_dn = ui.button(
+                            icon='arrow_downward',
+                            on_click=lambda i=it['id']:
+                                move_item(i, 'down'))
+                        b_dn.props('flat round color=primary size=xs')
+                        if is_last:
+                            b_dn.set_enabled(False)
+                        ui.button(
+                            icon='edit',
+                            on_click=lambda item=it:
+                                open_edit_item_dialog(
+                                    item, categories, refresh_fn),
+                        ).props('flat round color=primary size=xs')
+                        ui.button(
+                            icon='delete',
+                            on_click=lambda i=it['id']:
+                                _delete_and_refresh(i, refresh_fn),
+                        ).props('flat round color=negative size=xs')
             if it.get('description'):
                 d = ui.label(it['description']).classes(
                     'text-sm break-words leading-snug')
                 d.style('color: #334155 !important;')
 
-        # Colonne 3 : liens (prix à droite)
+        # Colonne 3 : liens
         if it.get('links'):
             with ui.column().classes('w-36 flex-shrink-0 gap-1'):
                 for link in it['links']:
@@ -876,85 +1100,19 @@ def render_add_item_form(wid, categories, refresh_fn):
             'text-lg font-bold mb-4')
         t.style('color: #1e293b !important;')
 
-        name = ui.input('Nom du cadeau',
-                        placeholder='Ex. Casque audio') \
-            .props('outlined rounded').classes('w-full')
-        description = ui.textarea('Description (optionnel)') \
-            .props('outlined rounded autogrow').classes('w-full mt-3')
-        image_url = ui.input("URL de l'image (optionnel)",
-                             placeholder='https://...') \
-            .props('outlined rounded').classes('w-full mt-3')
-
-        cat_options = {0: 'Sans catégorie'}
-        for c in categories:
-            cat_options[c['id']] = c['name']
-        category_select = ui.select(
-            cat_options, value=0, label='Catégorie',
-        ).props('outlined rounded').classes('w-full mt-3')
-
-        ui.separator().classes('my-4')
-        l = ui.label('Liens (site · URL · prix)').classes(
-            'text-sm font-semibold mb-2')
-        l.style('color: #334155 !important;')
-
-        links_container = ui.column().classes('w-full gap-3')
-        link_rows = []
-
-        def add_link_row():
-            with links_container:
-                with ui.row().classes(
-                    'w-full items-center gap-2 no-wrap'
-                ) as row:
-                    site = ui.input('Site', placeholder='Amazon') \
-                        .props('outlined rounded dense') \
-                        .classes('w-32')
-                    url = ui.input('URL', placeholder='https://...') \
-                        .props('outlined rounded dense') \
-                        .classes('flex-1')
-                    price = ui.number('Prix (€)', format='%.2f') \
-                        .props('outlined rounded dense') \
-                        .classes('w-28')
-
-                    entry = {'site': site, 'url': url, 'price': price}
-
-                    def remove(e=entry, r=row):
-                        if e in link_rows:
-                            link_rows.remove(e)
-                        r.delete()
-
-                    ui.button(icon='delete', on_click=remove) \
-                        .props('flat round color=negative size=sm')
-                link_rows.append(entry)
-
-        add_link_row()
-        ui.button('Ajouter un autre lien', icon='add',
-                  on_click=add_link_row) \
-            .props('flat rounded-lg color=primary no-caps') \
-            .classes('mt-2')
+        get_values = build_item_fields(categories=categories)
 
         def submit():
-            if not name.value:
+            v = get_values()
+            if not v['name']:
                 ui.notify('Nom requis', type='negative')
                 return
-            links = [
-                {'site': e['site'].value.strip() or None,
-                 'url': e['url'].value.strip(),
-                 'price': e['price'].value}
-                for e in link_rows if e['url'].value
-            ]
-            cid = (category_select.value
-                   if category_select.value else None)
-            create_item(
-                wid, name.value.strip(),
-                description.value.strip() or None,
-                image_url.value.strip() or None,
-                cid, links,
-            )
+            create_item(wid, v['name'], v['description'],
+                        v['image_url'], v['category_id'], v['links'])
             refresh_fn()
             ui.notify('Cadeau ajouté !', type='positive')
 
-        ui.button('Ajouter le cadeau', icon='check',
-                  on_click=submit) \
+        ui.button('Ajouter le cadeau', icon='check', on_click=submit) \
             .props('unelevated rounded-lg color=primary') \
             .classes('w-full mt-4 py-2 text-base font-semibold')
 
