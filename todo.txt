@@ -1,0 +1,41 @@
+il y encore des modifications à faire :
+-creaction liste :
+    - avoir le choix entre une image (en donnant un lien) ou emoji ou rien
+-dans les liste de cadeau :
+    -il faut par defaut l'état d'offre des cadeaux soient masqués (si je vais sur ma page pour faire des modifs)
+    -quand un cadeau est offert il faut enlever le "annuler mon offre" et juste ajouter la croix pour suppimer les prénoms comme en mode édition
+    -il faut que je puisse supprimer mon prénom depuis un autre appareil
+
+en mode édition :
+    - je ne dois pas voir si les gens on offert un cadeau.
+    - enlever le nota "Mode édition"
+    - pour les cadeaux il faut qu'ils soient de se genre :
+        +----------------------------------------------------+
+        | Monter ↑ Descendre ↓ Modifier <- ecart -> Supprimer|
+        +--------+-------------------------------+-----------+
+        | photo  | Titre                         | liens 1   |
+        |        | Description                   | liens x   |
+        +--------+-------------------------------+-----------+
+        | OFFRE : X/Y Offert par: X, Y                J'offre|
+        +----------------------------------------------------+
+
+    - il faut que "ajouter cadeau" et modifier cadeau" aient le même layout que les cadeau (si l'écran n'est pas assè large, il faut rest en colonne):
+        +----------------------------------------------------------------------+
+        | categorie                                                            |
+        +----------+-------------------------------+---------------------------+
+        |lien photo| Titre                         | site, url, prix           |
+        |ou emoji  | Description                   | + ajouter un autre lien   |
+        +----------+-------------------------------+---------------------------+
+        | peut-être offer [] x fois, [] illimité              ajouter le cadeau|
+        +----------------------------------------------------------------------+
+
+    - il faut enlever le bloc d'édition des catégories
+    - l'édition des catégorie se fait directement depuis la ligne de la catégorie :
+        +----------------------------+---------------------------------------------------------------------------+
+        | url photo ou emoji ou rien | categorie                           Monter ↑ Descendre ↓ valider Supprimer|                                 |
+        +----------------------------+---------------------------------------------------------------------------+
+
+    - pour ajouter l'ajout d'une catégorie le layou doit être comme la modification
+    - ajouter des boutons : ajoute une catégorie, ajouter un cadeau en dessous de "mes envies"
+    - ajouter un bouton ajoute un cadeau à la fin de chaque catégorie ( pour gagner du temps sans la saisie)
+    - partout où il y est possible de mettre un émoji ou une image, il faut fusionner cette option. C'est soit je mets un lien d'une image soit j'écrit un émoji et si c'est vide on n'affiche rien
