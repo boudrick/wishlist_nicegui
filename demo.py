@@ -11,7 +11,6 @@ def has_demo_data() -> bool:
 
 
 def seed_demo() -> bool:
-    """Supprime et recrée les exemples."""
     with connection() as conn:
         conn.execute("DELETE FROM wishlists WHERE owner LIKE '[Démo]%'")
 
@@ -24,11 +23,11 @@ def seed_demo() -> bool:
         'Noël 2025', '[Démo] Audrick', 'internal', None,
         'Mes envies pour les fêtes 🎄', pwd, 'rose', '🎄',
     )
-    c_jeux = create_category(wid, '🎮 Jeux vidéo')
-    c_livres = create_category(wid, '📚 Livres & BD')
-    c_vest = create_category(wid, '👕 Vêtements')
-    c_cuisine = create_category(wid, '🍳 Cuisine')
-    c_musique = create_category(wid, '🎵 Musique')
+    c_jeux = create_category(wid, 'Jeux vidéo', '🎮')
+    c_livres = create_category(wid, 'Livres & BD', '📚')
+    c_vest = create_category(wid, 'Vêtements', '👕')
+    c_cuisine = create_category(wid, 'Cuisine', '🍳')
+    c_musique = create_category(wid, 'Musique', '🎵')
 
     it1 = create_item(
         wid, 'Zelda : Tears of the Kingdom',
@@ -41,9 +40,8 @@ def seed_demo() -> bool:
         ],
         max_offers=1,
     )
-    it2 = create_item(
-        wid, 'Elden Ring',
-        'Édition standard PS5',
+    create_item(
+        wid, 'Elden Ring', 'Édition standard PS5',
         'https://picsum.photos/seed/eldenring/400/400', c_jeux,
         [
             {'site': 'Amazon', 'url': 'https://www.amazon.fr', 'price': 39.99},
@@ -52,8 +50,7 @@ def seed_demo() -> bool:
         max_offers=1,
     )
     it3 = create_item(
-        wid, 'Manette DualSense',
-        'Coloris blanc, pour PS5',
+        wid, 'Manette DualSense', 'Coloris blanc, pour PS5',
         'https://picsum.photos/seed/dualsense/400/400', c_jeux,
         [
             {'site': 'Sony', 'url': 'https://www.playstation.com', 'price': 69.99},
@@ -62,8 +59,7 @@ def seed_demo() -> bool:
         max_offers=3,
     )
     create_item(
-        wid, 'Dune — Frank Herbert',
-        'Édition collector reliée',
+        wid, 'Dune — Frank Herbert', 'Édition collector reliée',
         'https://picsum.photos/seed/dune/400/400', c_livres,
         [{'site': 'Fnac', 'url': 'https://www.fnac.com', 'price': 32.90}],
         max_offers=1,
@@ -81,7 +77,7 @@ def seed_demo() -> bool:
     create_item(
         wid, 'Astérix — Le Bouclier Arverne',
         'Album relié, éditions Hachette',
-        'https://picsum.photos/seed/asterix/400/400', c_livres,
+        '📖', c_livres,  # ← emoji comme visuel (pas d'image)
         [{'site': 'Amazon', 'url': 'https://www.amazon.fr', 'price': 10.50}],
         max_offers=None,
     )
@@ -96,9 +92,8 @@ def seed_demo() -> bool:
         max_offers=1,
     )
     it8 = create_item(
-        wid, 'Chaussettes en laine',
-        'Lot de 3, taille 39-42',
-        'https://picsum.photos/seed/chaussettes/400/400', c_vest,
+        wid, 'Chaussettes en laine', 'Lot de 3, taille 39-42',
+        '🧦', c_vest,  # ← emoji
         [{'site': 'Decathlon', 'url': 'https://www.decathlon.fr', 'price': 14.99}],
         max_offers=None,
     )
@@ -115,7 +110,7 @@ def seed_demo() -> bool:
     create_item(
         wid, 'Livre — La Cuisine de référence',
         'Éditions Flammarion',
-        'https://picsum.photos/seed/livre-cuisine/400/400', c_cuisine,
+        '🍳', c_cuisine,  # ← emoji
         [{'site': 'Fnac', 'url': 'https://www.fnac.com', 'price': 39.95}],
         max_offers=1,
     )
@@ -132,13 +127,11 @@ def seed_demo() -> bool:
     )
     create_item(
         wid, 'Vinyle — Daft Punk, Random Access Memories',
-        'Édition 10e anniversaire',
-        'https://picsum.photos/seed/daftpunk/400/400', c_musique,
+        'Édition 10e anniversaire', '🎵', c_musique,  # ← emoji
         [{'site': 'Fnac', 'url': 'https://www.fnac.com', 'price': 34.99}],
         max_offers=1,
     )
 
-    # Réservations d'exemple
     add_reservation(it1, 'Sophie')
     add_reservation(it3, 'Marc')
     add_reservation(it3, 'Léa')
@@ -151,9 +144,9 @@ def seed_demo() -> bool:
         'Anniversaire', '[Démo] Sophie', 'internal', None,
         'Pour mes 30 ans 🎂', pwd, 'emerald', '🎂',
     )
-    c_cuisine2 = create_category(wid2, '🍳 Cuisine')
-    c_bien = create_category(wid2, '🧘 Bien-être')
-    c_loisirs = create_category(wid2, '🎨 Loisirs créatifs')
+    c_cuisine2 = create_category(wid2, 'Cuisine', '🍳')
+    c_bien = create_category(wid2, 'Bien-être', '🧘')
+    c_loisirs = create_category(wid2, 'Loisirs créatifs', '🎨')
 
     it20 = create_item(
         wid2, 'Robot pâtissier KitchenAid',
@@ -201,8 +194,7 @@ def seed_demo() -> bool:
     )
     create_item(
         wid2, 'Coffret bougies parfumées',
-        '3 senteurs, cire de soja',
-        'https://picsum.photos/seed/bougies/400/400', c_bien,
+        '3 senteurs, cire de soja', '🕯️', c_bien,  # ← emoji
         [{'site': 'Diptyque', 'url': 'https://www.diptyqueparis.com', 'price': 180.00}],
         max_offers=1,
     )
@@ -218,8 +210,7 @@ def seed_demo() -> bool:
     )
     create_item(
         wid2, 'Carnet de croquis A4',
-        'Papier 180g, reliure cousue',
-        'https://picsum.photos/seed/carnet/400/400', c_loisirs,
+        'Papier 180g, reliure cousue', '📔', c_loisirs,  # ← emoji
         [{'site': 'Le Géant des Beaux-Arts', 'url': 'https://www.geant-beaux-arts.fr', 'price': 18.50}],
         max_offers=None,
     )
@@ -244,10 +235,10 @@ def seed_demo() -> bool:
         'Mes envies', '[Démo] Léa', 'internal', None,
         'Juste comme ça 💫', pwd, 'custom:#0f766e', '✨',
     )
-    c_photo = create_category(wid4, '📷 Photo')
-    c_audio = create_category(wid4, '🎧 Audio')
-    c_tech = create_category(wid4, '💻 Tech')
-    c_voyage = create_category(wid4, '✈️ Voyage')
+    c_photo = create_category(wid4, 'Photo', '📷')
+    c_audio = create_category(wid4, 'Audio', '🎧')
+    c_tech = create_category(wid4, 'Tech', '💻')
+    c_voyage = create_category(wid4, 'Voyage', '✈️')
 
     create_item(
         wid4, 'Appareil photo Fujifilm X-T5',
@@ -319,8 +310,7 @@ def seed_demo() -> bool:
     )
     it40 = create_item(
         wid4, 'Guide de voyage Japon',
-        'Le Routard 2025-2026',
-        'https://picsum.photos/seed/guidejapon/400/400', c_voyage,
+        'Le Routard 2025-2026', '🗺️', c_voyage,  # ← emoji
         [
             {'site': 'Fnac', 'url': 'https://www.fnac.com', 'price': 18.90},
             {'site': 'Amazon', 'url': 'https://www.amazon.fr', 'price': 17.50},
@@ -329,8 +319,7 @@ def seed_demo() -> bool:
     )
     create_item(
         wid4, 'Oreiller de voyage en mousse à mémoire',
-        'Housse lavable, étui inclus',
-        'https://picsum.photos/seed/oreiller/400/400', c_voyage,
+        'Housse lavable, étui inclus', '✈️', c_voyage,  # ← emoji
         [{'site': 'Decathlon', 'url': 'https://www.decathlon.fr', 'price': 24.99}],
         max_offers=2,
     )

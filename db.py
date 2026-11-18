@@ -40,7 +40,6 @@ def connection():
 def init_db():
     with connection() as conn:
         c = conn.cursor()
-
         c.execute('''CREATE TABLE IF NOT EXISTS wishlists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -50,7 +49,7 @@ def init_db():
             description TEXT,
             password TEXT,
             color TEXT,
-            emoji TEXT DEFAULT '🎁',
+            emoji TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         c.execute('''CREATE TABLE IF NOT EXISTS items (
@@ -79,6 +78,7 @@ def init_db():
             wishlist_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             position INTEGER DEFAULT 0,
+            emoji TEXT,
             FOREIGN KEY (wishlist_id) REFERENCES wishlists(id)
                 ON DELETE CASCADE
         )''')
@@ -100,8 +100,7 @@ def init_db():
         if not has_column('wishlists', 'color'):
             c.execute('ALTER TABLE wishlists ADD COLUMN color TEXT')
         if not has_column('wishlists', 'emoji'):
-            c.execute(
-                "ALTER TABLE wishlists ADD COLUMN emoji TEXT DEFAULT '🎁'")
+            c.execute('ALTER TABLE wishlists ADD COLUMN emoji TEXT')
         if not has_column('items', 'image_url'):
             c.execute('ALTER TABLE items ADD COLUMN image_url TEXT')
         if not has_column('items', 'category_id'):
@@ -121,6 +120,8 @@ def init_db():
         if not has_column('items', 'max_offers'):
             c.execute(
                 'ALTER TABLE items ADD COLUMN max_offers INTEGER DEFAULT 1')
+        if not has_column('categories', 'emoji'):
+            c.execute('ALTER TABLE categories ADD COLUMN emoji TEXT')
 
         if (has_column('items', 'url')
                 or has_column('items', 'price')):
@@ -154,26 +155,26 @@ def get_wishlist(wid):
 
 
 def create_wishlist(title, owner, wtype, url, description, password_hash,
-                    color, emoji='🎁'):
+                    color, emoji=None):
     with connection() as conn:
         cur = conn.execute(
             'INSERT INTO wishlists '
             '(title, owner, type, url, description, password, color, emoji) '
             'VALUES (?,?,?,?,?,?,?,?)',
             (title, owner, wtype, url, description, password_hash,
-             color, emoji or '🎁'))
+             color, emoji or None))
         return cur.lastrowid
 
 
 def update_wishlist(wid, title, owner, description, url, color,
-                    emoji='🎁'):
+                    emoji=None):
     with connection() as conn:
         conn.execute(
             'UPDATE wishlists '
             'SET title=?, owner=?, description=?, url=?, color=?, emoji=? '
             'WHERE id=?',
             (title, owner, description, url, color,
-             emoji or '🎁', wid))
+             emoji or None, wid))
 
 
 def set_wishlist_password(wid, password_hash):
@@ -205,17 +206,24 @@ def get_categories(wid):
             'ORDER BY position, id', (wid,))]
 
 
-def create_category(wid, name):
+def create_category(wid, name, emoji=None):
     with connection() as conn:
         row = conn.execute(
             'SELECT MAX(position) AS p FROM categories WHERE wishlist_id=?',
             (wid,)).fetchone()
         pos = (row['p'] or 0) + 1
         cur = conn.execute(
-            'INSERT INTO categories (wishlist_id, name, position) '
-            'VALUES (?,?,?)',
-            (wid, name, pos))
+            'INSERT INTO categories (wishlist_id, name, position, emoji) '
+            'VALUES (?,?,?,?)',
+            (wid, name, pos, emoji or None))
         return cur.lastrowid
+
+
+def update_category(cid, name, emoji=None):
+    with connection() as conn:
+        conn.execute(
+            'UPDATE categories SET name=?, emoji=? WHERE id=?',
+            (name, emoji or None, cid))
 
 
 def delete_category(cid):

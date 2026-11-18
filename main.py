@@ -4,7 +4,7 @@ from db import (
     init_db, hash_password, verify_password,
     get_wishlists, get_wishlist, create_wishlist, update_wishlist,
     delete_wishlist, set_wishlist_password,
-    get_categories, create_category, delete_category,
+    get_categories, create_category, update_category, delete_category,
     swap_category_position,
     get_items_with_links, create_item, update_item, delete_item,
     swap_item_position, get_item_counts,
@@ -23,15 +23,23 @@ init_db()
 # ============================================================
 # Helpers
 # ============================================================
+def render_visual(value, emoji_class='text-3xl', img_class='w-12 h-12'):
+    """Affiche soit une image (URL), soit un emoji, soit rien."""
+    if not value:
+        return
+    v = str(value).strip()
+    if v.startswith('http://') or v.startswith('https://'):
+        ui.image(v).classes(f'{img_class} rounded-lg flex-shrink-0')\
+            .props('fit=cover')
+    else:
+        ui.label(v).classes(f'{emoji_class} leading-none')
+
+
 def _open_wishlist(wid, url, is_internal):
     if is_internal:
         ui.navigate.to(f'/wishlist/{wid}')
     elif url:
         ui.run_javascript(f'window.open({json.dumps(url)}, "_blank")')
-
-
-def wishlist_emoji(w):
-    return w.get('emoji') or '🎁'
 
 
 def _my_reservations_set():
@@ -49,94 +57,6 @@ def _remove_my_reservation(res_id):
     lst = [r for r in app.storage.user.get('my_reservations', [])
            if r != res_id]
     app.storage.user['my_reservations'] = lst
-
-
-# ============================================================
-# Emoji picker — palette complète par catégories
-# ============================================================
-EMOJI_GROUPS = {
-    'Fêtes': ['🎁', '🎄', '🎅', '🎆', '🎇', '🎉', '🎊', '🎈',
-              '🎂', '🥳', '🕯️', '🎃', '🥂', '🎀', '🪅'],
-    'Amour': ['💝', '💖', '💗', '💓', '💞', '💕', '❤️', '🧡',
-              '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔',
-              '💌', '💍', '💐', '🌹'],
-    'Loisirs': ['🎮', '🎲', '🎯', '🎨', '🎭', '🎬', '🎤', '🎧',
-                '🎼', '🎵', '🎶', '🎸', '🎹', '🥁', '🎺', '🎻',
-                '🎷', '📯'],
-    'Sport': ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏉', '🎱',
-              '🏓', '🏸', '🥊', '🏋️', '🚴', '🏊', '🧘', '⛹️',
-              '🤸', '🏂', '⛷️', '🏄'],
-    'Tech': ['📱', '💻', '🖥️', '⌨️', '🖱️', '📷', '📹', '🎥',
-             '📺', '📻', '🎙️', '⌚', '🕹️', '💾', '💿', '📀'],
-    'Livres': ['📚', '📖', '📕', '📗', '📘', '📙', '📓', '📔',
-               '📒', '📝', '✏️', '🖊️', '🖋️', '🖌️', '🖍️'],
-    'Vêtements': ['👕', '👖', '👗', '👘', '👙', '👚', '👔', '👞',
-                  '👟', '👠', '👢', '👒', '🎩', '🧢', '🧣', '🧤',
-                  '🧦', '👜', '👛', '👝'],
-    'Cuisine': ['🍳', '🍴', '🥄', '🍽️', '🍶', '🍷', '🍸', '🍺',
-                '🍻', '☕', '🍵', '🧉', '🍾', '🥃', '🍹', '🥤'],
-    'Maison': ['🏠', '🛋️', '🛏️', '🚪', '🪑', '🛁', '🚿', '🧴',
-               '🧻', '🖼️', '🪞', '🪴', '🧹'],
-    'Voyage': ['✈️', '🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓',
-               '🚑', '🚒', '🚐', '🚁', '🚂', '🚆', '🚢', '⛵',
-               '🚀', '🛸', '🗺️', '🧳'],
-    'Animaux': ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼',
-                '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔',
-                '🐧', '🦅', '🦉', '🦄'],
-    'Nature': ['🌱', '🌿', '🍀', '🌵', '🌴', '🌲', '🌳', '🌷',
-               '🌸', '🌺', '🌻', '🌼', '🌈', '☀️', '⭐', '🌟',
-               '🌙', '☁️', '⛅', '🌊'],
-    'Divers': ['💎', '🎓', '🏆', '🥇', '🥈', '🥉', '🎗️', '🏅',
-               '🧸', '🎏', '🪩', '🔑', '💡', '🧭', '🔮', '🎰',
-               '🎪', '🛍️', '🎴', '🃏'],
-}
-
-
-def emoji_picker(initial='🎁'):
-    state = {'value': initial or '🎁'}
-    buttons = {}
-
-    def _highlight():
-        for e, b in buttons.items():
-            if e == state['value']:
-                b.classes(remove='ring-transparent',
-                          add='ring-indigo-500 bg-indigo-50')
-            else:
-                b.classes(remove='ring-indigo-500 bg-indigo-50',
-                          add='ring-transparent')
-
-    def select(emoji):
-        state['value'] = emoji
-        _highlight()
-
-    def render():
-        buttons.clear()
-        with ui.column().classes(
-            'gap-3 w-full max-h-64 overflow-y-auto pr-2 '
-            'border border-slate-200 rounded-lg p-3'
-        ):
-            for group_name, emojis in EMOJI_GROUPS.items():
-                lbl = ui.label(group_name).classes(
-                    'text-xs font-semibold uppercase tracking-wide')
-                lbl.style('color: #94a3b8 !important;')
-                with ui.row().classes('gap-1 flex-wrap'):
-                    for e in emojis:
-                        btn = ui.element('div').classes(
-                            'cursor-pointer rounded-lg w-9 h-9 '
-                            'flex items-center justify-center '
-                            'text-xl hover:bg-slate-100 '
-                            'ring-2 ring-transparent'
-                        )
-                        btn.on('click', lambda x=e: select(x))
-                        with btn:
-                            ui.label(e)
-                        buttons[e] = btn
-        _highlight()
-
-    def get_value():
-        return state['value'] or '🎁'
-
-    return state, render, get_value
 
 
 # ============================================================
@@ -282,36 +202,109 @@ def color_picker(initial='indigo'):
 
 
 # ============================================================
-# Champs d'un cadeau (partagé ajout / édition)
+# Formulaire d'item (layout 3 colonnes)
 # ============================================================
-def build_item_fields(item=None, categories=None):
+def build_item_fields(item=None, categories=None, default_category_id=None):
     item = item or {}
     categories = categories or []
 
-    name = ui.input('Nom du cadeau',
-                    value=item.get('name', ''),
-                    placeholder='Ex. Casque audio') \
-        .props('outlined rounded').classes('w-full')
-    description = ui.textarea('Description (optionnel)',
-                              value=item.get('description') or '') \
-        .props('outlined rounded autogrow').classes('w-full mt-3')
-    image_url = ui.input("URL de l'image (optionnel)",
-                         value=item.get('image_url') or '',
-                         placeholder='https://...') \
-        .props('outlined rounded').classes('w-full mt-3')
-
+    # Row 1 : catégorie (pleine largeur)
     cat_options = {0: 'Sans catégorie'}
     for c in categories:
         cat_options[c['id']] = c['name']
-    initial_cat = item.get('category_id') or 0
+    initial_cat = item.get('category_id') or default_category_id or 0
     if initial_cat not in cat_options:
         initial_cat = 0
+
     category_select = ui.select(
         cat_options, value=initial_cat, label='Catégorie',
-    ).props('outlined rounded').classes('w-full mt-3')
+    ).props('outlined rounded dense').classes('w-full')
 
-    # --- Nombre de fois ---
-    ui.separator().classes('my-4')
+    # Row 2 : 3 colonnes responsives
+    with ui.element('div').classes(
+        'grid grid-cols-1 md:grid-cols-[140px_1fr_280px] '
+        'gap-3 items-start w-full mt-3'
+    ):
+        # Col 1 : visual
+        with ui.column().classes('gap-1'):
+            ul = ui.label('Photo / émoji').classes('text-xs font-semibold')
+            ul.style('color: #64748b !important;')
+            visual_input = ui.input(
+                placeholder='🎁 ou https://...',
+                value=item.get('image_url') or '',
+            ).props('outlined rounded dense').classes('w-full')
+
+        # Col 2 : titre + desc
+        with ui.column().classes('gap-2'):
+            name_input = ui.input('Titre du cadeau',
+                                  value=item.get('name', '')) \
+                .props('outlined rounded dense').classes('w-full')
+            desc_input = ui.textarea(
+                'Description (optionnel)',
+                value=item.get('description') or '') \
+                .props('outlined rounded dense autogrow') \
+                .classes('w-full')
+
+        # Col 3 : liens dynamiques
+        with ui.column().classes('gap-1'):
+            ll = ui.label('Liens').classes('text-xs font-semibold')
+            ll.style('color: #64748b !important;')
+
+            links_container = ui.column().classes('w-full gap-2')
+            link_rows = []
+
+            def add_link_row(site_val='', url_val='', price_val=None):
+                with links_container:
+                    with ui.column().classes(
+                        'w-full gap-1 bg-slate-50 rounded-lg p-2'
+                    ) as box:
+                        with ui.row().classes(
+                            'w-full items-center gap-1 no-wrap'
+                        ):
+                            site = ui.input(
+                                placeholder='Site', value=site_val,
+                            ).props('outlined rounded dense') \
+                                .classes('flex-1')
+                            price = ui.number(
+                                placeholder='€', value=price_val,
+                                format='%.2f',
+                            ).props('outlined rounded dense') \
+                                .classes('w-20')
+                            entry = {'site': site, 'price': price,
+                                     'url': None, 'box': box}
+
+                            def remove(e=entry):
+                                if e in link_rows:
+                                    link_rows.remove(e)
+                                e['box'].delete()
+
+                            ui.button(icon='close', on_click=remove) \
+                                .props('flat round dense '
+                                       'color=negative size=xs')
+                        url = ui.input(
+                            placeholder='https://...', value=url_val,
+                        ).props('outlined rounded dense') \
+                            .classes('w-full mt-1')
+                        entry['url'] = url
+                        link_rows.append(entry)
+
+            existing = item.get('links') or []
+            if existing:
+                for ln in existing:
+                    add_link_row(ln.get('site') or '',
+                                 ln.get('url') or '',
+                                 ln.get('price'))
+            else:
+                add_link_row()
+
+            ui.button('+ Ajouter un autre lien', icon='add',
+                      on_click=lambda: add_link_row()) \
+                .props('flat dense no-caps size=sm color=primary') \
+                .classes('mt-1')
+
+    # Row 3 : offre options
+    ui.separator().classes('my-3')
+
     mo = item.get('max_offers', 1)
     if mo is None:
         initial_mode = 'unlimited'
@@ -325,84 +318,39 @@ def build_item_fields(item=None, categories=None):
 
     off_lb = ui.label(
         "Combien de fois ce cadeau peut-il être offert ?") \
-        .classes('text-sm font-semibold mb-2')
-    off_lb.style('color: #334155 !important;')
+        .classes('text-xs font-semibold mb-1')
+    off_lb.style('color: #64748b !important;')
 
-    quantity_mode = ui.radio(
-        {'once': 'Une seule fois',
-         'multiple': 'Plusieurs fois',
-         'unlimited': 'Illimité'},
-        value=initial_mode,
-    ).props('inline')
+    with ui.row().classes('items-center gap-3 flex-wrap'):
+        quantity_mode = ui.radio(
+            {'once': 'Une seule fois',
+             'multiple': 'Plusieurs fois',
+             'unlimited': 'Illimité'},
+            value=initial_mode,
+        ).props('inline dense')
 
-    qty_row = ui.row().classes('items-center gap-2 mt-2')
-    with qty_row:
-        ql = ui.label('Nombre max :').classes('text-sm')
-        ql.style('color: #334155 !important;')
-        qty_input = ui.number(value=initial_qty, min=2, max=99,
-                              format='%d') \
-            .props('outlined rounded dense').classes('w-24')
+        qty_row = ui.row().classes('items-center gap-1')
+        with qty_row:
+            ql = ui.label('×').classes('text-sm')
+            ql.style('color: #475569 !important;')
+            qty_input = ui.number(value=initial_qty, min=2, max=99,
+                                  format='%d') \
+                .props('outlined rounded dense').classes('w-20')
 
-    qty_row.set_visibility(initial_mode == 'multiple')
-    quantity_mode.on_value_change(
-        lambda e: qty_row.set_visibility(e.value == 'multiple'))
-
-    # --- Liens ---
-    ui.separator().classes('my-4')
-    l = ui.label('Liens (site · URL · prix)').classes(
-        'text-sm font-semibold mb-2')
-    l.style('color: #334155 !important;')
-
-    links_container = ui.column().classes('w-full gap-3')
-    link_rows = []
-
-    def add_link_row(site_val='', url_val='', price_val=None):
-        with links_container:
-            with ui.row().classes(
-                'w-full items-center gap-2 no-wrap'
-            ) as row:
-                site = ui.input('Site', value=site_val,
-                                placeholder='Amazon') \
-                    .props('outlined rounded dense').classes('w-32')
-                url = ui.input('URL', value=url_val,
-                               placeholder='https://...') \
-                    .props('outlined rounded dense').classes('flex-1')
-                price = ui.number('Prix (€)', value=price_val,
-                                  format='%.2f') \
-                    .props('outlined rounded dense').classes('w-28')
-
-                entry = {'site': site, 'url': url, 'price': price}
-
-                def remove(e=entry, r=row):
-                    if e in link_rows:
-                        link_rows.remove(e)
-                    r.delete()
-
-                ui.button(icon='delete', on_click=remove) \
-                    .props('flat round color=negative size=sm')
-            link_rows.append(entry)
-
-    existing = item.get('links') or []
-    if existing:
-        for ln in existing:
-            add_link_row(ln.get('site') or '',
-                         ln.get('url') or '',
-                         ln.get('price'))
-    else:
-        add_link_row()
-
-    ui.button('Ajouter un autre lien', icon='add',
-              on_click=lambda: add_link_row()) \
-        .props('flat rounded-lg color=primary no-caps').classes('mt-2')
+        qty_row.set_visibility(initial_mode == 'multiple')
+        quantity_mode.on_value_change(
+            lambda e: qty_row.set_visibility(e.value == 'multiple'))
 
     def get_values():
-        links = [
-            {'site': e['site'].value.strip() or None,
-             'url': e['url'].value.strip(),
-             'price': e['price'].value}
-            for e in link_rows
-            if e['url'].value and e['url'].value.strip()
-        ]
+        links = []
+        for e in link_rows:
+            u = (e['url'].value or '').strip()
+            if u:
+                links.append({
+                    'site': (e['site'].value or '').strip() or None,
+                    'url': u,
+                    'price': e['price'].value,
+                })
         mode = quantity_mode.value
         if mode == 'once':
             max_offers = 1
@@ -411,16 +359,406 @@ def build_item_fields(item=None, categories=None):
         else:
             max_offers = int(qty_input.value or 2)
         return {
-            'name': (name.value or '').strip(),
-            'description': (description.value or '').strip() or None,
-            'image_url': (image_url.value or '').strip() or None,
-            'category_id': category_select.value
-            if category_select.value else None,
+            'name': (name_input.value or '').strip(),
+            'description': (desc_input.value or '').strip() or None,
+            'image_url': (visual_input.value or '').strip() or None,
+            'category_id': (category_select.value
+                            if category_select.value else None),
             'links': links,
             'max_offers': max_offers,
         }
 
     return get_values
+
+
+# ============================================================
+# Dialog ajout / édition d'un item
+# ============================================================
+async def open_add_item_dialog(wid, categories, refresh_fn,
+                               default_category_id=None):
+    with ui.dialog() as dialog, ui.card().classes(
+        'w-[900px] max-w-full p-6 rounded-2xl max-h-[90vh] '
+        'overflow-y-auto'
+    ):
+        lbl = ui.label('Ajouter un cadeau').classes(
+            'text-lg font-bold mb-4')
+        lbl.style('color: #1e293b !important;')
+
+        get_values = build_item_fields(
+            categories=categories,
+            default_category_id=default_category_id)
+
+        def submit():
+            v = get_values()
+            if not v['name']:
+                ui.notify('Titre requis', type='negative')
+                return
+            create_item(wid, v['name'], v['description'],
+                        v['image_url'], v['category_id'], v['links'],
+                        v['max_offers'])
+            dialog.submit(True)
+
+        with ui.row().classes(
+            'w-full justify-between items-center mt-4'
+        ):
+            ui.button('Annuler',
+                      on_click=lambda: dialog.submit(None)) \
+                .props('flat rounded-lg color=grey-7')
+            ui.button('Ajouter le cadeau', icon='check',
+                      on_click=submit) \
+                .props('unelevated rounded-lg color=primary')
+
+    if await dialog:
+        refresh_fn()
+        ui.notify('Cadeau ajouté !', type='positive')
+
+
+async def open_edit_item_dialog(item, categories, refresh_fn):
+    with ui.dialog() as dialog, ui.card().classes(
+        'w-[900px] max-w-full p-6 rounded-2xl max-h-[90vh] '
+        'overflow-y-auto'
+    ):
+        lbl = ui.label('Modifier le cadeau').classes(
+            'text-lg font-bold mb-4')
+        lbl.style('color: #1e293b !important;')
+
+        get_values = build_item_fields(
+            item=item, categories=categories)
+
+        def save():
+            v = get_values()
+            if not v['name']:
+                ui.notify('Titre requis', type='negative')
+                return
+            update_item(item['id'], v['name'], v['description'],
+                        v['image_url'], v['category_id'], v['links'],
+                        v['max_offers'])
+            dialog.submit(True)
+
+        with ui.row().classes(
+            'w-full justify-between items-center mt-4'
+        ):
+            ui.button('Annuler',
+                      on_click=lambda: dialog.submit(None)) \
+                .props('flat rounded-lg color=grey-7')
+            ui.button('Enregistrer', icon='check', on_click=save) \
+                .props('unelevated rounded-lg color=primary')
+
+    if await dialog:
+        refresh_fn()
+        ui.notify('Cadeau modifié.', type='positive')
+
+
+# ============================================================
+# Dialog ajout de catégorie
+# ============================================================
+async def open_add_category_dialog(wid, refresh_fn):
+    with ui.dialog() as dialog, ui.card().classes(
+        'w-[600px] max-w-full p-6 rounded-2xl'
+    ):
+        lbl = ui.label('Ajouter une catégorie').classes(
+            'text-lg font-bold mb-4')
+        lbl.style('color: #1e293b !important;')
+
+        with ui.row().classes('w-full items-center gap-2'):
+            visual_in = ui.input(placeholder='🎁 ou https://...') \
+                .props('outlined rounded dense').classes('w-40')
+            name_in = ui.input(placeholder='Nom de la catégorie') \
+                .props('outlined rounded dense').classes('flex-1')
+
+        def submit():
+            n = (name_in.value or '').strip()
+            if not n:
+                ui.notify('Nom requis', type='negative')
+                return
+            create_category(wid, n,
+                            (visual_in.value or '').strip() or None)
+            dialog.submit(True)
+
+        with ui.row().classes('w-full justify-end gap-2 mt-4'):
+            ui.button('Annuler',
+                      on_click=lambda: dialog.submit(None)) \
+                .props('flat rounded-lg color=grey-7')
+            ui.button('Ajouter', icon='check', on_click=submit) \
+                .props('unelevated rounded-lg color=primary')
+
+    if await dialog:
+        refresh_fn()
+        ui.notify('Catégorie ajoutée.', type='positive')
+
+
+# ============================================================
+# Offres / réservations
+# ============================================================
+def _remove_reservation(res_id, refresh_fn):
+    delete_reservation(res_id)
+    _remove_my_reservation(res_id)
+    refresh_fn()
+    ui.notify('Offre supprimée.', type='info')
+
+
+async def _open_offer_dialog(it, refresh_fn):
+    with ui.dialog() as dialog, ui.card().classes(
+        'w-96 p-6 rounded-2xl'
+    ):
+        lbl = ui.label("J'offre ce cadeau").classes(
+            'text-lg font-bold mb-1')
+        lbl.style('color: #1e293b !important;')
+        sub = ui.label(f'« {it["name"]} »').classes('text-sm mb-4')
+        sub.style('color: #64748b !important;')
+
+        name_input = ui.input(
+            'Votre prénom (optionnel)',
+            value=app.storage.user.get('offerer_name', ''),
+            placeholder='Ex. Alice',
+        ).props('outlined rounded').classes('w-full')
+
+        def confirm():
+            name = (name_input.value or '').strip() or None
+            if name:
+                app.storage.user['offerer_name'] = name
+            res_id = add_reservation(it['id'], name)
+            _add_my_reservation(res_id)
+            dialog.submit(True)
+
+        with ui.row().classes('w-full justify-end gap-2 mt-4'):
+            ui.button('Annuler',
+                      on_click=lambda: dialog.submit(None)) \
+                .props('flat rounded-lg color=grey-7')
+            ui.button('Confirmer', icon='favorite', on_click=confirm) \
+                .props('unelevated rounded-lg color=primary')
+
+    if await dialog:
+        refresh_fn()
+        ui.notify('Merci ! Votre offre est enregistrée.',
+                  type='positive')
+
+
+def render_offer_zone(it, refresh_fn):
+    reservations = it.get('reservations') or []
+    max_offers = it.get('max_offers')
+    count = len(reservations)
+    my_res = _my_reservations_set()
+    i_reserved = any(r['id'] in my_res for r in reservations)
+
+    if max_offers is None:
+        text = f'Illimité · {count} offert(s)'
+        bg, fg = '#e2e8f0', '#475569'
+        available = True
+    elif count >= max_offers:
+        text = 'Déjà offert ✓'
+        bg, fg = '#d1fae5', '#047857'
+        available = False
+    else:
+        text = f'{count}/{max_offers} offert(s)'
+        bg, fg = '#fef3c7', '#b45309'
+        available = True
+
+    with ui.row().classes(
+        'w-full items-center gap-2 flex-wrap '
+        'pt-2 pb-2 px-3 border-t border-black/5'
+    ):
+        badge = ui.label(text).classes(
+            'text-xs font-semibold px-2 py-1 rounded-full')
+        badge.style(f'background-color: {bg} !important; '
+                    f'color: {fg} !important;')
+
+        if reservations:
+            par = ui.label('Offert par :').classes('text-xs')
+            par.style('color: #475569 !important;')
+            for r in reservations:
+                nm = r['offerer_name'] or 'anonyme'
+                with ui.element('div').classes(
+                    'inline-flex items-center bg-white/80 '
+                    'rounded-full pl-2 pr-0.5 py-0.5'
+                ):
+                    nl = ui.label(nm).classes('text-xs')
+                    nl.style('color: #475569 !important;')
+                    ui.button(
+                        icon='close',
+                        on_click=lambda rid=r['id']:
+                            _remove_reservation(rid, refresh_fn),
+                    ).props('flat round dense size=xs color=negative')
+
+        ui.space()
+
+        if available and not i_reserved:
+            ui.button(
+                "J'offre", icon='favorite',
+                on_click=lambda: _open_offer_dialog(it, refresh_fn),
+            ).props('unelevated dense no-caps rounded-full '
+                    'color=primary size=sm')
+
+
+# ============================================================
+# Rendu d'un item
+# ============================================================
+def render_items_grid(items, is_admin, refresh_fn, color,
+                      categories, move_item, wid, show_offers):
+    with ui.element('div').classes(
+        'grid grid-cols-1 lg:grid-cols-2 gap-4 w-full auto-rows-fr'
+    ):
+        for idx, it in enumerate(items):
+            render_item(it, is_admin, refresh_fn, color, categories,
+                        move_item, idx == 0,
+                        idx == len(items) - 1, wid, show_offers)
+
+
+def render_item(it, is_admin, refresh_fn, color, categories,
+                move_item, is_first, is_last, wid, show_offers):
+    item_bg = (
+        f'radial-gradient(circle at center, '
+        f'{light_bg(color, "90")} 0%, '
+        f'{light_bg(color, "30")} 100%)'
+    )
+
+    with ui.element('div').classes(
+        'rounded-2xl flex flex-col overflow-hidden'
+    ).style(
+        f'background-color: {light_bg(color, "40")} !important; '
+        f'background-image: {item_bg} !important; '
+        'box-shadow: 0 1px 3px rgba(0,0,0,0.04);'
+    ):
+        # --- Barre d'actions (admin uniquement) ---
+        if is_admin:
+            with ui.row().classes(
+                'w-full items-center justify-between px-2 pt-1 pb-0'
+            ):
+                with ui.row().classes('gap-0 items-center'):
+                    b_up = ui.button(
+                        icon='arrow_upward', text='Monter',
+                        on_click=lambda: move_item(it['id'], 'up'))
+                    b_up.props('flat dense no-caps color=primary size=sm')
+                    b_up.set_enabled(not is_first)
+                    b_dn = ui.button(
+                        icon='arrow_downward', text='Descendre',
+                        on_click=lambda: move_item(it['id'], 'down'))
+                    b_dn.props('flat dense no-caps color=primary size=sm')
+                    b_dn.set_enabled(not is_last)
+                    b_ed = ui.button(
+                        icon='edit', text='Modifier',
+                        on_click=lambda item=it:
+                            open_edit_item_dialog(item, categories,
+                                                  refresh_fn))
+                    b_ed.props('flat dense no-caps color=primary size=sm')
+                b_del = ui.button(
+                    icon='delete', text='Supprimer',
+                    on_click=lambda i=it['id']:
+                        _delete_and_refresh(i, refresh_fn))
+                b_del.props('flat dense no-caps color=negative size=sm')
+
+        # --- Contenu principal ---
+        with ui.element('div').classes('p-4 flex gap-3 items-start'):
+            with ui.element('div').classes(
+                'flex-shrink-0 w-16 h-16 flex items-center justify-center'
+            ):
+                if it.get('image_url'):
+                    render_visual(it['image_url'],
+                                  emoji_class='text-3xl',
+                                  img_class='w-16 h-16')
+                else:
+                    with ui.element('div').classes(
+                        'w-16 h-16 rounded-xl bg-white/60 flex '
+                        'items-center justify-center'
+                    ):
+                        ui.icon('image').classes(
+                            'text-3xl text-slate-300')
+
+            with ui.column().classes('flex-1 min-w-0 gap-1'):
+                t = ui.label(it['name']).classes(
+                    'text-base font-bold break-words leading-tight')
+                t.style('color: #1e293b !important;')
+                if it.get('description'):
+                    d = ui.label(it['description']).classes(
+                        'text-sm break-words leading-snug')
+                    d.style('color: #334155 !important;')
+
+            if it.get('links'):
+                with ui.column().classes(
+                    'w-36 flex-shrink-0 gap-1'
+                ):
+                    for link in it['links']:
+                        with ui.element('div').classes(
+                            'rounded-lg px-2 py-1 flex items-center '
+                            'justify-between gap-2 w-full '
+                            'overflow-hidden'
+                        ).style(
+                            'background-color: #ffffff !important;'
+                        ):
+                            lk = ui.link(
+                                link.get('site') or 'Lien',
+                                link['url'], new_tab=True,
+                            ).classes(
+                                'text-xs font-medium truncate '
+                                'no-underline min-w-0 flex-1')
+                            lk.style('color: #4338ca !important;')
+                            if link.get('price') is not None:
+                                p = ui.label(
+                                    f"{link['price']:.0f}€"
+                                ).classes(
+                                    'text-xs font-bold '
+                                    'whitespace-nowrap flex-shrink-0')
+                                p.style('color: #059669 !important;')
+
+        # --- Zone offres : uniquement si non-admin ET toggle activé ---
+        if not is_admin and show_offers:
+            render_offer_zone(it, refresh_fn)
+
+
+def _delete_and_refresh(item_id, refresh_fn):
+    delete_item(item_id)
+    refresh_fn()
+    ui.notify('Cadeau supprimé.', type='info')
+
+
+# ============================================================
+# En-tête de catégorie
+# ============================================================
+def render_category_header_editable(cat, idx, total, move_cat,
+                                    del_cat, refresh_fn):
+    with ui.row().classes(
+        'w-full items-center gap-2 bg-indigo-50 rounded-lg '
+        'px-3 py-2 mt-4'
+    ):
+        visual_in = ui.input(
+            value=cat.get('emoji') or '', placeholder='🎁',
+        ).props('outlined rounded dense').classes('w-24')
+        name_in = ui.input(value=cat['name']) \
+            .props('outlined rounded dense').classes('flex-1')
+
+        b_up = ui.button(icon='arrow_upward',
+                         on_click=lambda: move_cat(cat['id'], 'up'))
+        b_up.props('flat round dense color=primary size=sm')
+        b_up.set_enabled(idx > 0)
+
+        b_dn = ui.button(icon='arrow_downward',
+                         on_click=lambda: move_cat(cat['id'], 'down'))
+        b_dn.props('flat round dense color=primary size=sm')
+        b_dn.set_enabled(idx < total - 1)
+
+        def save():
+            n = (name_in.value or '').strip()
+            if not n:
+                ui.notify('Nom requis', type='negative')
+                return
+            update_category(cat['id'], n,
+                            (visual_in.value or '').strip() or None)
+            refresh_fn()
+            ui.notify('Catégorie modifiée.', type='positive')
+
+        ui.button(icon='check', on_click=save) \
+            .props('flat round dense color=primary size=sm')
+        ui.button(icon='delete',
+                  on_click=lambda: del_cat(cat['id'])) \
+            .props('flat round dense color=negative size=sm')
+
+
+def render_category_header_public(cat, color_solid):
+    with ui.row().classes('items-center gap-2 mt-4'):
+        render_visual(cat.get('emoji'), emoji_class='text-2xl',
+                      img_class='w-8 h-8')
+        h = ui.label(cat['name']).classes('text-lg font-semibold')
+        h.style(f'color: {color_solid} !important;')
 
 
 # ============================================================
@@ -504,8 +842,8 @@ def render_wishlist_card(w, item_count):
         )
         apply_gradient(band, color)
         with band:
-            ui.label(wishlist_emoji(w)).classes(
-                'text-4xl flex-shrink-0 leading-none')
+            render_visual(w.get('emoji'), emoji_class='text-4xl',
+                          img_class='w-12 h-12')
             t = ui.label(w['title']).classes(
                 'text-lg font-bold line-clamp-1 min-w-0 flex-1')
             t.style('color: #ffffff !important;')
@@ -537,7 +875,6 @@ def add_page():
     render_header('Nouvelle liste', back_url='/')
 
     color_state, render_picker, get_color = color_picker('indigo')
-    emoji_state, render_emoji, get_emoji = emoji_picker('🎁')
 
     with page_container():
         with ui.element('div').classes(
@@ -559,9 +896,13 @@ def add_page():
 
             ui.separator().classes('my-6')
 
-            lb_e = ui.label('Émoji').classes('text-sm font-semibold mb-2')
-            lb_e.style('color: #334155 !important;')
-            render_emoji()
+            # --- Visual : emoji ou URL d'image ou rien ---
+            lb_v = ui.label('Émoji ou URL d\'image (optionnel)') \
+                .classes('text-sm font-semibold mb-2')
+            lb_v.style('color: #334155 !important;')
+            visual_in = ui.input(
+                placeholder='🎁 ou https://...') \
+                .props('outlined rounded').classes('w-full')
 
             ui.separator().classes('my-6')
 
@@ -645,7 +986,7 @@ def add_page():
                     description.value.strip() or None,
                     hash_password(password.value),
                     get_color(),
-                    get_emoji(),
+                    (visual_in.value or '').strip() or None,
                 )
                 app.storage.user[f'admin_wl_{wid}'] = True
                 ui.notify('Liste créée ! Mode édition activé.',
@@ -687,6 +1028,16 @@ def wishlist_page(wid: int):
 
     admin_key = f'admin_wl_{wid}'
     is_admin = app.storage.user.get(admin_key, False)
+
+    # --- Masquer/afficher l'état des offres (masqué par défaut) ---
+    show_key = f'show_offers_wl_{wid}'
+    show_offers = app.storage.user.get(show_key, False)
+
+    def toggle_offers():
+        nonlocal show_offers
+        show_offers = not show_offers
+        app.storage.user[show_key] = show_offers
+        page_body.refresh()
 
     def set_admin(value):
         nonlocal is_admin
@@ -744,11 +1095,12 @@ def wishlist_page(wid: int):
                          value=w.get('url') or '') \
                 .props('outlined rounded').classes('w-full mt-3')
 
-            lb_e = ui.label('Émoji').classes(
+            lb_e = ui.label('Émoji ou URL d\'image').classes(
                 'text-sm font-semibold mt-4 mb-2')
             lb_e.style('color: #334155 !important;')
-            _, render_emoji, get_emoji = emoji_picker(wishlist_emoji(w))
-            render_emoji()
+            visual_in = ui.input(placeholder='🎁 ou https://...',
+                                 value=w.get('emoji') or '') \
+                .props('outlined rounded').classes('w-full')
 
             lb = ui.label('Couleur').classes(
                 'text-sm font-semibold mt-4 mb-2')
@@ -786,7 +1138,8 @@ def wishlist_page(wid: int):
                     wid, t.value.strip(), t.value.strip(),
                     d.value.strip() or None,
                     u.value.strip() or None,
-                    get_color(), get_emoji())
+                    get_color(),
+                    (visual_in.value or '').strip() or None)
                 dialog.submit(True)
 
             with ui.row().classes(
@@ -824,13 +1177,6 @@ def wishlist_page(wid: int):
             else:
                 by_cat[None].append(it)
 
-        def add_cat(name):
-            if not name or not name.strip():
-                return
-            create_category(wid, name.strip())
-            page_body.refresh()
-            ui.notify('Catégorie ajoutée.', type='positive')
-
         def del_cat(cid):
             delete_category(cid)
             page_body.refresh()
@@ -848,15 +1194,28 @@ def wishlist_page(wid: int):
             f'background-color: {light_bg(color, "20")} !important;'
         ):
             with page_container():
+                # Barre : Accueil + Mode édition
                 with ui.row().classes(
-                    'w-full items-center justify-between'
+                        'w-full items-center justify-between gap-2'
                 ):
                     back = ui.button('Accueil', icon='arrow_back',
                                      on_click=lambda: ui.navigate.to('/'))
                     back.props('flat no-caps rounded-full')
                     back.style(f'color: {c_solid} !important;')
-                    admin_button()
 
+                    with ui.row().classes('gap-2 items-center'):
+                        if not is_admin:
+                            lbl = ('Masquer les offres' if show_offers
+                                   else 'Afficher les offres')
+                            ic = ('visibility_off' if show_offers
+                                  else 'visibility')
+                            tb = ui.button(lbl, icon=ic,
+                                           on_click=toggle_offers)
+                            tb.props('flat no-caps rounded-full size=sm')
+                            tb.style(f'color: {c_solid} !important;')
+                        admin_button()
+
+                # Titre + description
                 with ui.element('div').classes(
                     'p-6 md:p-8 rounded-2xl w-full'
                 ).style(
@@ -866,95 +1225,59 @@ def wishlist_page(wid: int):
                     with ui.row().classes(
                         'w-full items-start justify-between gap-4'
                     ):
-                        with ui.row().classes('items-start gap-3 flex-1'):
-                            ui.label(wishlist_emoji(w)).classes(
-                                'text-4xl leading-none pt-1')
-                            with ui.column().classes('gap-1 min-w-0'):
+                        with ui.row().classes(
+                            'items-start gap-3 flex-1'
+                        ):
+                            render_visual(
+                                w.get('emoji'),
+                                emoji_class='text-4xl',
+                                img_class='w-14 h-14')
+                            with ui.column().classes(
+                                'gap-1 min-w-0'
+                            ):
                                 t = ui.label(w['title']).classes(
                                     'text-2xl font-bold')
                                 t.style(
                                     f'color: {c_solid} !important;')
                                 if w.get('description'):
-                                    d = ui.label(w['description']) \
-                                        .classes('mt-1')
+                                    d = ui.label(
+                                        w['description']).classes('mt-1')
                                     d.style(
                                         'color: #334155 !important;')
                         if is_admin:
-                            ui.button(icon='edit',
-                                      on_click=edit_wishlist_dialog) \
-                                .props('flat round color=primary')
+                            ui.button(
+                                icon='edit',
+                                on_click=edit_wishlist_dialog,
+                            ).props('flat round color=primary')
 
-                if is_admin:
-                    with ui.element('div').classes('soft-card p-6'):
-                        ct = ui.label('Catégories').classes(
-                            'text-lg font-bold mb-3')
-                        ct.style('color: #1e293b !important;')
-                        if categories:
-                            with ui.column().classes(
-                                'w-full gap-2 mb-3'
-                            ):
-                                n = len(categories)
-                                for idx, cat in enumerate(categories):
-                                    with ui.row().classes(
-                                        'w-full items-center gap-2 '
-                                        'bg-indigo-50 rounded-lg '
-                                        'px-3 py-2'
-                                    ):
-                                        cl = ui.label(cat['name']) \
-                                            .classes(
-                                                'text-sm font-medium flex-1')
-                                        cl.style(
-                                            'color: #4338ca !important;')
-                                        b_up = ui.button(
-                                            icon='arrow_upward',
-                                            on_click=lambda cid=cat['id']:
-                                                move_cat(cid, 'up'))
-                                        b_up.props(
-                                            'flat round dense '
-                                            'color=primary size=xs')
-                                        if idx == 0:
-                                            b_up.set_enabled(False)
-                                        b_dn = ui.button(
-                                            icon='arrow_downward',
-                                            on_click=lambda cid=cat['id']:
-                                                move_cat(cid, 'down'))
-                                        b_dn.props(
-                                            'flat round dense '
-                                            'color=primary size=xs')
-                                        if idx == n - 1:
-                                            b_dn.set_enabled(False)
-                                        ui.button(
-                                            icon='close',
-                                            on_click=lambda cid=cat['id']:
-                                                del_cat(cid),
-                                        ).props('flat round dense '
-                                                'color=indigo size=xs')
-                        with ui.row().classes(
-                            'gap-2 w-full items-center'
-                        ):
-                            new_cat = ui.input(
-                                placeholder='Nouvelle catégorie') \
-                                .props('outlined rounded dense') \
-                                .classes('flex-1')
-                            ui.button(icon='add',
-                                      on_click=lambda:
-                                          add_cat(new_cat.value)) \
-                                .props('unelevated rounded-lg '
-                                       'color=primary')
-
+                # "Mes envies" + boutons d'ajout
                 with ui.row().classes(
-                    'w-full items-center justify-between mt-2'
+                    'w-full items-center justify-between flex-wrap '
+                    'gap-2 mt-2'
                 ):
                     t = ui.label('Mes envies').classes(
                         'text-2xl font-bold')
                     t.style(f'color: {c_solid} !important;')
                     if is_admin:
-                        mb = ui.label('Mode édition').classes(
-                            'text-xs font-semibold bg-amber-100 '
-                            'text-amber-700 px-3 py-1 rounded-full')
-                        mb.style('color: #b45309 !important;')
+                        with ui.row().classes('gap-2 flex-wrap'):
+                            ui.button(
+                                'Ajouter une catégorie', icon='category',
+                                on_click=lambda: open_add_category_dialog(
+                                    wid, page_body.refresh),
+                            ).props('outline no-caps rounded-full '
+                                    'color=primary size=sm')
+                            ui.button(
+                                'Ajouter un cadeau', icon='add',
+                                on_click=lambda: open_add_item_dialog(
+                                    wid, categories, page_body.refresh),
+                            ).props('unelevated no-caps rounded-full '
+                                    'color=primary size=sm')
 
-                if not items:
+                # Contenu
+                has_items = bool(items)
+                has_cats = bool(categories)
+
+                if not has_items and not has_cats:
                     with ui.column().classes(
                         'w-full items-center justify-center py-16 gap-3'
                     ):
@@ -964,387 +1287,51 @@ def wishlist_page(wid: int):
                             .classes('text-xl font-semibold')
                         t.style('color: #334155 !important;')
                         s = ui.label(
-                            "Ajoutez votre première envie ci-dessous."
+                            "Ajoutez votre première envie ci-dessus."
                             if is_admin
                             else "Cette liste n'a pas encore d'envie."
                         ).classes('text-center max-w-md')
                         s.style('color: #64748b !important;')
                 else:
+                    # Catégories + items
+                    for cat_idx, cat in enumerate(categories):
+                        if is_admin:
+                            render_category_header_editable(
+                                cat, cat_idx, len(categories),
+                                move_cat, del_cat, page_body.refresh)
+                        else:
+                            render_category_header_public(cat, c_solid)
+
+                        cat_items = by_cat.get(cat['id'], [])
+                        if cat_items:
+                            render_items_grid(
+                                cat_items, is_admin, page_body.refresh,
+                                color, categories, move_item, wid, show_offers)
+
+                        if is_admin:
+                            ui.button(
+                                '+ Ajouter un cadeau ici', icon='add',
+                                on_click=lambda cid=cat['id']:
+                                    open_add_item_dialog(
+                                        wid, categories,
+                                        page_body.refresh,
+                                        default_category_id=cid),
+                            ).props('flat no-caps rounded-lg '
+                                    'color=primary size=sm') \
+                                .classes('mt-2')
+
+                    # Items sans catégorie
                     if by_cat[None]:
                         if categories:
                             h = ui.label('Sans catégorie').classes(
                                 'text-sm font-semibold uppercase '
-                                'tracking-wide mt-2')
+                                'tracking-wide mt-4')
                             h.style(f'color: {c_solid} !important;')
-                        render_items_grid(by_cat[None], is_admin,
-                                          page_body.refresh, color,
-                                          categories, move_item)
-                    for cat in categories:
-                        cat_items = by_cat.get(cat['id'], [])
-                        if not cat_items:
-                            continue
-                        h = ui.label(cat['name']).classes(
-                            'text-sm font-semibold uppercase '
-                            'tracking-wide mt-4')
-                        h.style(f'color: {c_solid} !important;')
-                        render_items_grid(cat_items, is_admin,
-                                          page_body.refresh, color,
-                                          categories, move_item)
-
-                if is_admin:
-                    render_add_item_form(wid, categories,
-                                         page_body.refresh)
+                        render_items_grid(
+                            by_cat[None], is_admin, page_body.refresh,
+                            color, categories, move_item, wid, show_offers)
 
     page_body()
-
-
-# ============================================================
-# Dialog édition item
-# ============================================================
-async def open_edit_item_dialog(item, categories, refresh_fn):
-    with ui.dialog() as dialog, ui.card().classes(
-        'w-[620px] p-6 rounded-2xl max-h-[90vh] overflow-y-auto'
-    ):
-        lbl = ui.label('Modifier le cadeau').classes(
-            'text-lg font-bold mb-4')
-        lbl.style('color: #1e293b !important;')
-
-        get_values = build_item_fields(item=item, categories=categories)
-
-        def save():
-            v = get_values()
-            if not v['name']:
-                ui.notify('Nom requis', type='negative')
-                return
-            update_item(item['id'], v['name'], v['description'],
-                        v['image_url'], v['category_id'], v['links'],
-                        v['max_offers'])
-            dialog.submit(True)
-
-        with ui.row().classes('w-full justify-end gap-2 mt-4'):
-            ui.button('Annuler',
-                      on_click=lambda: dialog.submit(None)) \
-                .props('flat rounded-lg color=grey-7')
-            ui.button('Enregistrer', icon='check', on_click=save) \
-                .props('unelevated rounded-lg color=primary')
-
-    if await dialog:
-        refresh_fn()
-        ui.notify('Cadeau modifié.', type='positive')
-
-
-# ============================================================
-# Offres / réservations
-# ============================================================
-def _cancel_my_offer_for_item(it, refresh_fn):
-    my_res = _my_reservations_set()
-    for r in it.get('reservations', []):
-        if r['id'] in my_res:
-            delete_reservation(r['id'])
-            _remove_my_reservation(r['id'])
-    refresh_fn()
-    ui.notify('Offre annulée.', type='info')
-
-
-async def _open_offer_dialog(it, refresh_fn):
-    with ui.dialog() as dialog, ui.card().classes(
-        'w-96 p-6 rounded-2xl'
-    ):
-        lbl = ui.label("J'offre ce cadeau").classes(
-            'text-lg font-bold mb-1')
-        lbl.style('color: #1e293b !important;')
-        sub = ui.label(f'« {it["name"]} »').classes('text-sm mb-4')
-        sub.style('color: #64748b !important;')
-
-        name_input = ui.input(
-            'Votre prénom (optionnel)',
-            value=app.storage.user.get('offerer_name', ''),
-            placeholder='Ex. Alice',
-        ).props('outlined rounded').classes('w-full')
-
-        def confirm():
-            name = (name_input.value or '').strip() or None
-            if name:
-                app.storage.user['offerer_name'] = name
-            res_id = add_reservation(it['id'], name)
-            _add_my_reservation(res_id)
-            dialog.submit(True)
-
-        with ui.row().classes('w-full justify-end gap-2 mt-4'):
-            ui.button('Annuler',
-                      on_click=lambda: dialog.submit(None)) \
-                .props('flat rounded-lg color=grey-7')
-            ui.button('Confirmer', icon='favorite', on_click=confirm) \
-                .props('unelevated rounded-lg color=primary')
-
-    if await dialog:
-        refresh_fn()
-        ui.notify('Merci ! Votre offre est enregistrée.',
-                  type='positive')
-
-
-def _admin_delete_reservation(res_id, refresh_fn):
-    delete_reservation(res_id)
-    refresh_fn()
-    ui.notify('Réservation supprimée.', type='info')
-
-
-def _admin_clear_offers(it, refresh_fn):
-    delete_reservations_for_item(it['id'])
-    refresh_fn()
-    ui.notify('Toutes les offres ont été effacées.', type='info')
-
-
-def render_item_offer_zone(it, is_admin, refresh_fn):
-    max_offers = it.get('max_offers')
-    reservations = it.get('reservations') or []
-    count = len(reservations)
-    my_res = _my_reservations_set()
-    i_reserved = any(r['id'] in my_res for r in reservations)
-
-    if max_offers is None:
-        status = 'unlimited'
-    elif count >= max_offers:
-        status = 'full'
-    else:
-        status = 'available'
-
-    with ui.column().classes(
-        'w-full mt-2 pt-2 gap-1 border-t border-black/5'
-    ):
-        with ui.row().classes(
-            'w-full items-center gap-2 flex-wrap'
-        ):
-            # Badge statut
-            if status == 'unlimited':
-                b = ui.label(f'Illimité · {count} offert(s)') \
-                    .classes('text-xs font-semibold px-2 py-1 '
-                             'rounded-full')
-                b.style('background-color: #e2e8f0 !important; '
-                        'color: #475569 !important;')
-            elif status == 'full':
-                b = ui.label('Déjà offert ✓') \
-                    .classes('text-xs font-semibold px-2 py-1 '
-                             'rounded-full')
-                b.style('background-color: #d1fae5 !important; '
-                        'color: #047857 !important;')
-            else:
-                b = ui.label(f'{count}/{max_offers} offert(s)') \
-                    .classes('text-xs font-semibold px-2 py-1 '
-                             'rounded-full')
-                b.style('background-color: #fef3c7 !important; '
-                        'color: #b45309 !important;')
-
-            # Prénoms
-            if reservations:
-                with ui.row().classes(
-                    'items-center gap-1 flex-wrap flex-1 min-w-0'
-                ):
-                    lbl = ui.label('par').classes('text-xs')
-                    lbl.style('color: #475569 !important;')
-                    for r in reservations:
-                        nm = r['offerer_name'] or 'anonyme'
-                        if is_admin:
-                            with ui.element('div').classes(
-                                'inline-flex items-center gap-0.5 '
-                                'bg-white/70 rounded-full '
-                                'pl-2 pr-0.5 py-0.5'
-                            ):
-                                nl = ui.label(nm).classes('text-xs')
-                                nl.style('color: #475569 !important;')
-                                ui.button(
-                                    icon='close',
-                                    on_click=lambda rid=r['id']:
-                                        _admin_delete_reservation(
-                                            rid, refresh_fn),
-                                ).props('flat round dense '
-                                        'size=xs color=negative')
-                        else:
-                            nl = ui.label(nm).classes('text-xs')
-                            nl.style('color: #475569 !important;')
-
-            ui.space()
-
-            # Bouton principal
-            if i_reserved:
-                ui.button(
-                    'Annuler mon offre', icon='undo',
-                    on_click=lambda: _cancel_my_offer_for_item(
-                        it, refresh_fn),
-                ).props('flat dense no-caps rounded-full '
-                        'color=negative').classes('text-xs')
-            elif status in ('available', 'unlimited'):
-                ui.button(
-                    "J'offre", icon='favorite',
-                    on_click=lambda: _open_offer_dialog(
-                        it, refresh_fn),
-                ).props('unelevated dense no-caps rounded-full '
-                        'color=primary').classes('text-xs')
-
-            # Admin : reset
-            if is_admin and reservations:
-                ui.button(
-                    icon='delete_sweep',
-                    on_click=lambda: _admin_clear_offers(
-                        it, refresh_fn),
-                ).props('flat round dense size=xs color=negative')
-
-
-# ============================================================
-# Grille + Item
-# ============================================================
-def render_items_grid(items, is_admin, refresh_fn, color,
-                      categories, move_item):
-    with ui.element('div').classes(
-        'grid grid-cols-1 lg:grid-cols-2 gap-4 w-full auto-rows-fr'
-    ):
-        for idx, it in enumerate(items):
-            is_first = idx == 0
-            is_last = idx == len(items) - 1
-            render_item(it, is_admin, refresh_fn, color,
-                        categories, move_item, is_first, is_last)
-
-
-def render_item(it, is_admin, refresh_fn, color,
-                categories, move_item, is_first, is_last):
-    item_bg = (
-        f'radial-gradient(circle at center, '
-        f'{light_bg(color, "90")} 0%, '
-        f'{light_bg(color, "30")} 100%)'
-    )
-
-    with ui.element('div').classes(
-        'p-4 h-full rounded-2xl flex flex-col'
-    ).style(
-        f'background-color: {light_bg(color, "40")} !important; '
-        f'background-image: {item_bg} !important; '
-        'box-shadow: 0 1px 3px rgba(0,0,0,0.04);'
-    ):
-        # Contenu haut
-        with ui.element('div').classes(
-            'flex gap-3 items-start flex-1'
-        ):
-            # Photo
-            with ui.element('div').classes('flex-shrink-0'):
-                if it.get('image_url'):
-                    ui.image(it['image_url']) \
-                        .classes('w-24 h-24 rounded-xl') \
-                        .props('fit=cover')
-                else:
-                    with ui.element('div').classes(
-                        'w-24 h-24 rounded-xl bg-white/60 flex '
-                        'items-center justify-center'
-                    ):
-                        ui.icon('image').classes(
-                            'text-3xl text-slate-400')
-
-            # Titre + desc
-            with ui.column().classes('flex-1 min-w-0 gap-1'):
-                with ui.row().classes(
-                    'w-full items-start justify-between gap-1'
-                ):
-                    t = ui.label(it['name']).classes(
-                        'text-base font-bold break-words leading-tight')
-                    t.style('color: #1e293b !important;')
-                    if is_admin:
-                        with ui.row().classes('gap-0 flex-shrink-0'):
-                            b_up = ui.button(
-                                icon='arrow_upward',
-                                on_click=lambda i=it['id']:
-                                    move_item(i, 'up'))
-                            b_up.props('flat round color=primary '
-                                       'size=xs')
-                            if is_first:
-                                b_up.set_enabled(False)
-                            b_dn = ui.button(
-                                icon='arrow_downward',
-                                on_click=lambda i=it['id']:
-                                    move_item(i, 'down'))
-                            b_dn.props('flat round color=primary '
-                                       'size=xs')
-                            if is_last:
-                                b_dn.set_enabled(False)
-                            ui.button(
-                                icon='edit',
-                                on_click=lambda item=it:
-                                    open_edit_item_dialog(
-                                        item, categories, refresh_fn),
-                            ).props('flat round color=primary size=xs')
-                            ui.button(
-                                icon='delete',
-                                on_click=lambda i=it['id']:
-                                    _delete_and_refresh(i, refresh_fn),
-                            ).props('flat round color=negative '
-                                    'size=xs')
-                if it.get('description'):
-                    d = ui.label(it['description']).classes(
-                        'text-sm break-words leading-snug')
-                    d.style('color: #334155 !important;')
-
-            # Liens
-            if it.get('links'):
-                with ui.column().classes(
-                    'w-36 flex-shrink-0 gap-1'
-                ):
-                    for link in it['links']:
-                        with ui.element('div').classes(
-                            'rounded-lg px-2 py-1 flex items-center '
-                            'justify-between gap-2 w-full '
-                            'overflow-hidden'
-                        ).style(
-                            'background-color: #ffffff !important;'
-                        ):
-                            site_name = link.get('site') or 'Lien'
-                            lk = ui.link(site_name, link['url'],
-                                         new_tab=True).classes(
-                                'text-xs font-medium truncate '
-                                'no-underline min-w-0 flex-1'
-                            )
-                            lk.style('color: #4338ca !important;')
-                            if link.get('price') is not None:
-                                p = ui.label(
-                                    f"{link['price']:.0f}€"
-                                ).classes(
-                                    'text-xs font-bold '
-                                    'whitespace-nowrap flex-shrink-0'
-                                )
-                                p.style('color: #059669 !important;')
-
-        # Zone offres
-        render_item_offer_zone(it, is_admin, refresh_fn)
-
-
-def _delete_and_refresh(item_id, refresh_fn):
-    delete_item(item_id)
-    refresh_fn()
-    ui.notify('Cadeau supprimé.', type='info')
-
-
-# ============================================================
-# Formulaire ajout cadeau
-# ============================================================
-def render_add_item_form(wid, categories, refresh_fn):
-    with ui.element('div').classes('soft-card p-6 mt-4'):
-        t = ui.label('Ajouter un cadeau').classes(
-            'text-lg font-bold mb-4')
-        t.style('color: #1e293b !important;')
-
-        get_values = build_item_fields(categories=categories)
-
-        def submit():
-            v = get_values()
-            if not v['name']:
-                ui.notify('Nom requis', type='negative')
-                return
-            create_item(wid, v['name'], v['description'],
-                        v['image_url'], v['category_id'], v['links'],
-                        v['max_offers'])
-            refresh_fn()
-            ui.notify('Cadeau ajouté !', type='positive')
-
-        ui.button('Ajouter le cadeau', icon='check', on_click=submit) \
-            .props('unelevated rounded-lg color=primary') \
-            .classes('w-full mt-4 py-2 text-base font-semibold')
 
 
 # ============================================================
