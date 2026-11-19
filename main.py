@@ -266,11 +266,6 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
         cat_options, value=initial_cat, label='Catégorie',
     ).props('outlined rounded dense').classes('w-full')
 
-    # Titre de section (au-dessus des champs cadeau)
-    sec = ui.label('Cadeau').classes(
-        'text-sm font-bold uppercase tracking-wide')
-    sec.style('color: #64748b !important;')
-
     # Row 2 : 3 colonnes responsives
     with ui.element('div').classes(
         'grid grid-cols-1 md:grid-cols-[120px_1fr_400px] '
@@ -287,6 +282,9 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
 
         # Col 2 : titre + desc
         with ui.column().classes('gap-2'):
+            sec = ui.label('Cadeau').classes(
+                'text-xs font-semibold')
+            sec.style('color: #64748b !important;')
             name_input = ui.input('Titre du cadeau',
                                   value=item.get('name', '')) \
                 .props('outlined rounded dense').classes('w-full')
@@ -346,13 +344,15 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
             else:
                 add_link_row()
 
-            ui.button('+ Ajouter un autre lien', icon='add',
+            ui.button('Ajouter un autre lien', icon='add',
                       on_click=lambda: add_link_row()) \
-                .props('flat dense no-caps size=sm color=primary') \
+                .props('flat dense no-caps color=primary') \
                 .classes('mt-1')
 
-    # Row 3 : offre options
-    ui.separator().classes('my-3')
+    # Row 3 : offre options — même ligne de séparation que la zone
+    # d'offres des cartes cadeau (border-t rgba(0,0,0,0.05)).
+    sep = ui.element('div').classes('w-full border-t my-3')
+    sep.style('border-color: rgba(0,0,0,0.05) !important;')
 
     mo = item.get('max_offers', 1)
     if mo is None:
@@ -419,7 +419,7 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
 async def open_add_item_dialog(wid, categories, refresh_fn,
                                default_category_id=None):
     with ui.dialog() as dialog, ui.card().classes(
-        'w-[900px] max-w-full p-6 rounded-2xl max-h-[90vh] '
+        'w-[1150px] max-w-full p-6 rounded-2xl max-h-[90vh] '
         'overflow-y-auto'
     ):
         lbl = ui.label('Ajouter un cadeau').classes(
@@ -457,7 +457,7 @@ async def open_add_item_dialog(wid, categories, refresh_fn,
 
 async def open_edit_item_dialog(item, categories, refresh_fn):
     with ui.dialog() as dialog, ui.card().classes(
-        'w-[900px] max-w-full p-6 rounded-2xl max-h-[90vh] '
+        'w-[1150px] max-w-full p-6 rounded-2xl max-h-[90vh] '
         'overflow-y-auto'
     ):
         lbl = ui.label('Modifier le cadeau').classes(
@@ -742,8 +742,9 @@ def render_item(it, is_admin, refresh_fn, color, categories,
                                     'whitespace-nowrap flex-shrink-0')
                                 p.style('color: #059669 !important;')
 
-        # --- Zone offres (même séparation en édition et en lecture) ---
-        if show_offers:
+        # --- Zone offres : masquée en mode édition (anti-spoiler),
+        #     sinon contrôlée par le toggle « Afficher/Masquer ». ---
+        if show_offers and not is_admin:
             render_offer_zone(it, refresh_fn, is_admin)
 
 
@@ -761,10 +762,10 @@ def render_category_header_editable(cat, idx, total, move_cat,
     with ui.row().classes(
         'w-full items-center gap-2 rounded-2xl px-4 py-3 mt-4'
     ).style(
-        f'background-color: {light_bg(color, "40")} !important; '
-        f'background-image: radial-gradient(circle at center, '
-        f'{light_bg(color, "90")} 0%, {light_bg(color, "30")} 100%) '
-        '!important; box-shadow: 0 1px 3px rgba(0,0,0,0.04);'
+        'background-color: #ffffff !important; '
+        'background-image: radial-gradient(circle at center, '
+        '#ffffff 0%, #f1f5f9 100%) !important; '
+        'box-shadow: 0 1px 3px rgba(0,0,0,0.04);'
     ):
         visual_in = ui.input(
             value=cat.get('emoji') or '', placeholder='🎁',
@@ -1305,13 +1306,18 @@ def wishlist_page(wid: int):
                     with ui.row().classes(
                         'gap-2 flex-wrap items-center'
                     ):
-                        lbl = ('Masquer les offres' if show_offers
-                               else 'Afficher les offres')
-                        ic = ('visibility_off' if show_offers
-                              else 'visibility')
-                        tb = ui.button(lbl, icon=ic, on_click=toggle_offers)
-                        tb.props('flat no-caps rounded-full size=sm')
-                        tb.style(f'color: {c_solid} !important;')
+                        # Toggle : même style/taille que « Mode édition »,
+                        # masqué en mode édition (état des offres masqué, anti-spoiler).
+                        if not is_admin:
+                            lbl = ('Masquer les offres' if show_offers
+                                   else 'Afficher les offres')
+                            ic = ('visibility_off' if show_offers
+                                  else 'visibility')
+                            tb = ui.button(lbl, icon=ic,
+                                          on_click=toggle_offers)
+                            tb.props('unelevated no-caps rounded-full '
+                                     'color=primary')
+                            tb.classes('shadow-md')
 
                         if is_admin:
                             ui.button(
@@ -1319,13 +1325,13 @@ def wishlist_page(wid: int):
                                 on_click=lambda: open_add_category_dialog(
                                     wid, page_body.refresh),
                             ).props('unelevated no-caps rounded-full '
-                                    'color=primary size=sm')
+                                    'color=primary')
                             ui.button(
                                 'Ajouter un cadeau', icon='add',
                                 on_click=lambda: open_add_item_dialog(
                                     wid, categories, page_body.refresh),
                             ).props('unelevated no-caps rounded-full '
-                                    'color=primary size=sm')
+                                    'color=primary')
 
                 # Contenu
                 has_items = bool(items)
@@ -1372,7 +1378,7 @@ def wishlist_page(wid: int):
                                         page_body.refresh,
                                         default_category_id=cid),
                             ).props('unelevated no-caps rounded-full '
-                                    'color=primary size=sm') \
+                                    'color=primary') \
                                 .classes('mt-2')
 
                     # Items sans catégorie
