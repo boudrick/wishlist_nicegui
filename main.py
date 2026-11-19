@@ -60,6 +60,52 @@ def _remove_my_reservation(res_id):
 
 
 # ============================================================
+# Réinitialisation au départ de la page wishlist
+# ============================================================
+_RESET_JS_ADDED = False
+
+
+def add_reset_on_leave_js():
+    """Installe (une seule fois) le script qui réinitialise l'état
+    (mode édition + affichage des offres) quand on quitte la page."""
+    global _RESET_JS_ADDED
+    if _RESET_JS_ADDED:
+        return
+    _RESET_JS_ADDED = True
+    ui.add_head_html('''<script>
+(function () {
+  if (window.__wlResetInstalled) return;
+  window.__wlResetInstalled = true;
+  setInterval(function () {
+    var cur = window.location.pathname;
+    if (cur !== window.__wlExpectedPath && window.__wlCurrentWid) {
+      try {
+        navigator.sendBeacon(
+          '/api/reset_wishlist/' + window.__wlCurrentWid);
+      } catch (e) {}
+      window.__wlCurrentWid = null;
+    }
+  }, 400);
+  window.addEventListener('pagehide', function () {
+    if (window.__wlCurrentWid) {
+      try {
+        navigator.sendBeacon(
+          '/api/reset_wishlist/' + window.__wlCurrentWid);
+      } catch (e) {}
+    }
+  });
+})();
+</script>''')
+
+
+@app.get('/api/reset_wishlist/{wid}')
+def api_reset_wishlist(wid):
+    app.storage.user.pop(f'admin_wl_{wid}', None)
+    app.storage.user[f'show_offers_wl_{wid}'] = False
+    return 'ok'
+
+
+# ============================================================
 # Header
 # ============================================================
 def render_header(title='Listes de cadeaux', back_url=None,
@@ -220,9 +266,14 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
         cat_options, value=initial_cat, label='Catégorie',
     ).props('outlined rounded dense').classes('w-full')
 
+    # Titre de section (au-dessus des champs cadeau)
+    sec = ui.label('Cadeau').classes(
+        'text-sm font-bold uppercase tracking-wide')
+    sec.style('color: #64748b !important;')
+
     # Row 2 : 3 colonnes responsives
     with ui.element('div').classes(
-        'grid grid-cols-1 md:grid-cols-[140px_1fr_280px] '
+        'grid grid-cols-1 md:grid-cols-[120px_1fr_400px] '
         'gap-3 items-start w-full mt-3'
     ):
         # Col 1 : visual
@@ -255,37 +306,35 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
 
             def add_link_row(site_val='', url_val='', price_val=None):
                 with links_container:
-                    with ui.column().classes(
-                        'w-full gap-1 bg-slate-50 rounded-lg p-2'
+                    with ui.row().classes(
+                        'w-full items-center gap-1 no-wrap '
+                        'bg-slate-50 rounded-lg p-2'
                     ) as box:
-                        with ui.row().classes(
-                            'w-full items-center gap-1 no-wrap'
-                        ):
-                            site = ui.input(
-                                placeholder='Site', value=site_val,
-                            ).props('outlined rounded dense') \
-                                .classes('flex-1')
-                            price = ui.number(
-                                placeholder='€', value=price_val,
-                                format='%.2f',
-                            ).props('outlined rounded dense') \
-                                .classes('w-20')
-                            entry = {'site': site, 'price': price,
-                                     'url': None, 'box': box}
-
-                            def remove(e=entry):
-                                if e in link_rows:
-                                    link_rows.remove(e)
-                                e['box'].delete()
-
-                            ui.button(icon='close', on_click=remove) \
-                                .props('flat round dense '
-                                       'color=negative size=xs')
+                        site = ui.input(
+                            placeholder='Site', value=site_val,
+                        ).props('outlined rounded dense') \
+                            .classes('flex-1 min-w-[70px]')
                         url = ui.input(
                             placeholder='https://...', value=url_val,
                         ).props('outlined rounded dense') \
-                            .classes('w-full mt-1')
-                        entry['url'] = url
+                            .classes('flex-[2] min-w-[90px]')
+                        price = ui.number(
+                            placeholder='€', value=price_val,
+                            format='%.2f',
+                        ).props('outlined rounded dense') \
+                            .classes('w-16 flex-shrink-0')
+
+                        entry = {'site': site, 'url': url,
+                                 'price': price, 'box': box}
+
+                        def remove(e=entry):
+                            if e in link_rows:
+                                link_rows.remove(e)
+                            e['box'].delete()
+
+                        ui.button(icon='close', on_click=remove) \
+                            .props('flat round dense '
+                                   'color=negative size=xs')
                         link_rows.append(entry)
 
             existing = item.get('links') or []
@@ -308,13 +357,10 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
     mo = item.get('max_offers', 1)
     if mo is None:
         initial_mode = 'unlimited'
-        initial_qty = 2
-    elif mo == 1:
-        initial_mode = 'once'
-        initial_qty = 2
+        initial_qty = 1
     else:
-        initial_mode = 'multiple'
-        initial_qty = mo
+        initial_mode = 'limited'
+        initial_qty = int(mo or 1)
 
     off_lb = ui.label(
         "Combien de fois ce cadeau peut-il être offert ?") \
@@ -323,9 +369,7 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
 
     with ui.row().classes('items-center gap-3 flex-wrap'):
         quantity_mode = ui.radio(
-            {'once': 'Une seule fois',
-             'multiple': 'Plusieurs fois',
-             'unlimited': 'Illimité'},
+            {'limited': 'Limité', 'unlimited': 'Illimité'},
             value=initial_mode,
         ).props('inline dense')
 
@@ -333,13 +377,13 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
         with qty_row:
             ql = ui.label('×').classes('text-sm')
             ql.style('color: #475569 !important;')
-            qty_input = ui.number(value=initial_qty, min=2, max=99,
+            qty_input = ui.number(value=initial_qty, min=1, max=99,
                                   format='%d') \
                 .props('outlined rounded dense').classes('w-20')
 
-        qty_row.set_visibility(initial_mode == 'multiple')
+        qty_row.set_visibility(initial_mode == 'limited')
         quantity_mode.on_value_change(
-            lambda e: qty_row.set_visibility(e.value == 'multiple'))
+            lambda e: qty_row.set_visibility(e.value == 'limited'))
 
     def get_values():
         links = []
@@ -352,12 +396,10 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
                     'price': e['price'].value,
                 })
         mode = quantity_mode.value
-        if mode == 'once':
-            max_offers = 1
-        elif mode == 'unlimited':
+        if mode == 'unlimited':
             max_offers = None
         else:
-            max_offers = int(qty_input.value or 2)
+            max_offers = int(qty_input.value or 1)
         return {
             'name': (name_input.value or '').strip(),
             'description': (desc_input.value or '').strip() or None,
@@ -534,7 +576,7 @@ async def _open_offer_dialog(it, refresh_fn):
                   type='positive')
 
 
-def render_offer_zone(it, refresh_fn):
+def render_offer_zone(it, refresh_fn, is_admin=False):
     reservations = it.get('reservations') or []
     max_offers = it.get('max_offers')
     count = len(reservations)
@@ -582,7 +624,7 @@ def render_offer_zone(it, refresh_fn):
 
         ui.space()
 
-        if available and not i_reserved:
+        if available and not i_reserved and not is_admin:
             ui.button(
                 "J'offre", icon='favorite',
                 on_click=lambda: _open_offer_dialog(it, refresh_fn),
@@ -700,9 +742,9 @@ def render_item(it, is_admin, refresh_fn, color, categories,
                                     'whitespace-nowrap flex-shrink-0')
                                 p.style('color: #059669 !important;')
 
-        # --- Zone offres : uniquement si non-admin ET toggle activé ---
-        if not is_admin and show_offers:
-            render_offer_zone(it, refresh_fn)
+        # --- Zone offres (même séparation en édition et en lecture) ---
+        if show_offers:
+            render_offer_zone(it, refresh_fn, is_admin)
 
 
 def _delete_and_refresh(item_id, refresh_fn):
@@ -715,10 +757,14 @@ def _delete_and_refresh(item_id, refresh_fn):
 # En-tête de catégorie
 # ============================================================
 def render_category_header_editable(cat, idx, total, move_cat,
-                                    del_cat, refresh_fn):
+                                    del_cat, refresh_fn, color):
     with ui.row().classes(
-        'w-full items-center gap-2 bg-indigo-50 rounded-lg '
-        'px-3 py-2 mt-4'
+        'w-full items-center gap-2 rounded-2xl px-4 py-3 mt-4'
+    ).style(
+        f'background-color: {light_bg(color, "40")} !important; '
+        f'background-image: radial-gradient(circle at center, '
+        f'{light_bg(color, "90")} 0%, {light_bg(color, "30")} 100%) '
+        '!important; box-shadow: 0 1px 3px rgba(0,0,0,0.04);'
     ):
         visual_in = ui.input(
             value=cat.get('emoji') or '', placeholder='🎁',
@@ -767,6 +813,7 @@ def render_category_header_public(cat, color_solid):
 @ui.page('/')
 def home():
     apply_theme()
+    add_reset_on_leave_js()
     wishlists = get_wishlists()
 
     def load_demo():
@@ -872,6 +919,7 @@ def render_wishlist_card(w, item_count):
 @ui.page('/add')
 def add_page():
     apply_theme()
+    add_reset_on_leave_js()
     render_header('Nouvelle liste', back_url='/')
 
     color_state, render_picker, get_color = color_picker('indigo')
@@ -1004,6 +1052,10 @@ def add_page():
 @ui.page('/wishlist/{wid}')
 def wishlist_page(wid: int):
     apply_theme()
+    add_reset_on_leave_js()
+    ui.run_javascript(
+        f'window.__wlCurrentWid = {wid}; '
+        f'window.__wlExpectedPath = "/wishlist/{wid}";')
     w = get_wishlist(wid)
     if not w:
         render_header('Liste introuvable', back_url='/')
@@ -1204,15 +1256,6 @@ def wishlist_page(wid: int):
                     back.style(f'color: {c_solid} !important;')
 
                     with ui.row().classes('gap-2 items-center'):
-                        if not is_admin:
-                            lbl = ('Masquer les offres' if show_offers
-                                   else 'Afficher les offres')
-                            ic = ('visibility_off' if show_offers
-                                  else 'visibility')
-                            tb = ui.button(lbl, icon=ic,
-                                           on_click=toggle_offers)
-                            tb.props('flat no-caps rounded-full size=sm')
-                            tb.style(f'color: {c_solid} !important;')
                         admin_button()
 
                 # Titre + description
@@ -1250,7 +1293,7 @@ def wishlist_page(wid: int):
                                 on_click=edit_wishlist_dialog,
                             ).props('flat round color=primary')
 
-                # "Mes envies" + boutons d'ajout
+                # "Mes envies" + toggle offres + boutons d'ajout
                 with ui.row().classes(
                     'w-full items-center justify-between flex-wrap '
                     'gap-2 mt-2'
@@ -1258,13 +1301,24 @@ def wishlist_page(wid: int):
                     t = ui.label('Mes envies').classes(
                         'text-2xl font-bold')
                     t.style(f'color: {c_solid} !important;')
-                    if is_admin:
-                        with ui.row().classes('gap-2 flex-wrap'):
+
+                    with ui.row().classes(
+                        'gap-2 flex-wrap items-center'
+                    ):
+                        lbl = ('Masquer les offres' if show_offers
+                               else 'Afficher les offres')
+                        ic = ('visibility_off' if show_offers
+                              else 'visibility')
+                        tb = ui.button(lbl, icon=ic, on_click=toggle_offers)
+                        tb.props('flat no-caps rounded-full size=sm')
+                        tb.style(f'color: {c_solid} !important;')
+
+                        if is_admin:
                             ui.button(
                                 'Ajouter une catégorie', icon='category',
                                 on_click=lambda: open_add_category_dialog(
                                     wid, page_body.refresh),
-                            ).props('outline no-caps rounded-full '
+                            ).props('unelevated no-caps rounded-full '
                                     'color=primary size=sm')
                             ui.button(
                                 'Ajouter un cadeau', icon='add',
@@ -1298,7 +1352,8 @@ def wishlist_page(wid: int):
                         if is_admin:
                             render_category_header_editable(
                                 cat, cat_idx, len(categories),
-                                move_cat, del_cat, page_body.refresh)
+                                move_cat, del_cat, page_body.refresh,
+                                color)
                         else:
                             render_category_header_public(cat, c_solid)
 
@@ -1310,13 +1365,13 @@ def wishlist_page(wid: int):
 
                         if is_admin:
                             ui.button(
-                                '+ Ajouter un cadeau ici', icon='add',
+                                'Ajouter un cadeau', icon='add',
                                 on_click=lambda cid=cat['id']:
                                     open_add_item_dialog(
                                         wid, categories,
                                         page_body.refresh,
                                         default_category_id=cid),
-                            ).props('flat no-caps rounded-lg '
+                            ).props('unelevated no-caps rounded-full '
                                     'color=primary size=sm') \
                                 .classes('mt-2')
 
