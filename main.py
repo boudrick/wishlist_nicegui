@@ -664,7 +664,7 @@ def render_item(it, is_admin, refresh_fn, color, categories,
         # --- Barre d'actions (admin uniquement) ---
         if is_admin:
             with ui.row().classes(
-                'w-full items-center justify-between px-2 pt-1 pb-0'
+                'w-full items-center justify-between px-2 pt-1 pb-0 border-b border-black/5'
             ):
                 with ui.row().classes('gap-0 items-center'):
                     b_up = ui.button(
