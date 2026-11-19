@@ -2,7 +2,7 @@ import sqlite3
 import hashlib
 import secrets
 from pathlib import Path
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 DB_PATH = Path('wishlist.db')
 
@@ -16,10 +16,11 @@ def hash_password(password, salt=None):
 
 
 def verify_password(password, stored):
+    """Vérifie un mot de passe (comparaison en temps constant)."""
     if not stored or '$' not in stored:
         return False
     salt = stored.split('$', 1)[0]
-    return hash_password(password, salt) == stored
+    return secrets.compare_digest(hash_password(password, salt), stored)
 
 
 @contextmanager
@@ -91,6 +92,18 @@ def init_db():
                 ON DELETE CASCADE
         )''')
 
+        # Index des colonnes de jointure / tri les plus interrogées.
+        c.execute('CREATE INDEX IF NOT EXISTS idx_items_wishlist '
+                  'ON items(wishlist_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_items_category '
+                  'ON items(category_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_item_links_item '
+                  'ON item_links(item_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_reservations_item '
+                  'ON reservations(item_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_categories_wishlist '
+                  'ON categories(wishlist_id)')
+
         def has_column(table, column):
             c.execute(f"PRAGMA table_info({table})")
             return any(row[1] == column for row in c.fetchall())
@@ -154,9 +167,14 @@ def get_wishlist(wid):
         return dict(row) if row else None
 
 
+def _ctx(_conn):
+    """Réutilise la connexion fournie (opération en lot) ou en ouvre une."""
+    return nullcontext(_conn) if _conn is not None else connection()
+
+
 def create_wishlist(title, owner, wtype, url, description, password_hash,
-                    color, emoji=None):
-    with connection() as conn:
+                    color, emoji=None, _conn=None):
+    with _ctx(_conn) as conn:
         cur = conn.execute(
             'INSERT INTO wishlists '
             '(title, owner, type, url, description, password, color, emoji) '
@@ -206,8 +224,8 @@ def get_categories(wid):
             'ORDER BY position, id', (wid,))]
 
 
-def create_category(wid, name, emoji=None):
-    with connection() as conn:
+def create_category(wid, name, emoji=None, _conn=None):
+    with _ctx(_conn) as conn:
         row = conn.execute(
             'SELECT MAX(position) AS p FROM categories WHERE wishlist_id=?',
             (wid,)).fetchone()
@@ -264,23 +282,38 @@ def swap_category_position(cid, direction):
 # Items
 # ============================================================
 def get_items_with_links(wid):
+    """Charge items + liens + réservations en 3 requêtes au total
+    (au lieu de 2 par item, soit N+1)."""
     with connection() as conn:
         items = [dict(r) for r in conn.execute(
             'SELECT * FROM items WHERE wishlist_id=? '
             'ORDER BY position, id', (wid,))]
+        if not items:
+            return items
+        ids = [it['id'] for it in items]
+        ph = ','.join('?' * len(ids))
+
+        links_by_item = {}
+        for r in conn.execute(
+                f'SELECT * FROM item_links WHERE item_id IN ({ph}) '
+                'ORDER BY price IS NULL, price', ids):
+            links_by_item.setdefault(r['item_id'], []).append(dict(r))
+
+        res_by_item = {}
+        for r in conn.execute(
+                f'SELECT * FROM reservations WHERE item_id IN ({ph}) '
+                'ORDER BY created_at', ids):
+            res_by_item.setdefault(r['item_id'], []).append(dict(r))
+
         for it in items:
-            it['links'] = [dict(r) for r in conn.execute(
-                'SELECT * FROM item_links WHERE item_id=? '
-                'ORDER BY price IS NULL, price', (it['id'],))]
-            it['reservations'] = [dict(r) for r in conn.execute(
-                'SELECT * FROM reservations WHERE item_id=? '
-                'ORDER BY created_at', (it['id'],))]
+            it['links'] = links_by_item.get(it['id'], [])
+            it['reservations'] = res_by_item.get(it['id'], [])
         return items
 
 
 def create_item(wishlist_id, name, description, image_url,
-                category_id, links, max_offers=1):
-    with connection() as conn:
+                category_id, links, max_offers=1, _conn=None):
+    with _ctx(_conn) as conn:
         if category_id:
             row = conn.execute(
                 'SELECT MAX(position) AS p FROM items '
@@ -401,8 +434,8 @@ def swap_item_position(item_id, direction):
 # ============================================================
 # Réservations
 # ============================================================
-def add_reservation(item_id, offerer_name=None):
-    with connection() as conn:
+def add_reservation(item_id, offerer_name=None, _conn=None):
+    with _ctx(_conn) as conn:
         cur = conn.execute(
             'INSERT INTO reservations (item_id, offerer_name) VALUES (?,?)',
             (item_id, offerer_name))

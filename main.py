@@ -29,8 +29,9 @@ def render_visual(value, emoji_class='text-3xl', img_class='w-12 h-12'):
         return
     v = str(value).strip()
     if v.startswith('http://') or v.startswith('https://'):
+        # `lazy` : l'image ne se charge que quand elle est visible.
         ui.image(v).classes(f'{img_class} rounded-lg flex-shrink-0')\
-            .props('fit=cover')
+            .props('lazy fit=cover')
     else:
         ui.label(v).classes(f'{emoji_class} leading-none')
 
@@ -67,7 +68,13 @@ _RESET_JS_ADDED = False
 
 def add_reset_on_leave_js():
     """Installe (une seule fois) le script qui réinitialise l'état
-    (mode édition + affichage des offres) quand on quitte la page."""
+    (mode édition + affichage des offres) quand on quitte la page.
+
+    Au lieu d'un polling par setInterval (400 ms, coûteux en CPU),
+    on intercepte directement les navigations SPA : history.pushState /
+    replaceState (navigation interne NiceGUI) et popstate (bouton
+    retour du navigateur). `pagehide` couvre la fermeture de l'onglet.
+    """
     global _RESET_JS_ADDED
     if _RESET_JS_ADDED:
         return
@@ -76,23 +83,53 @@ def add_reset_on_leave_js():
 (function () {
   if (window.__wlResetInstalled) return;
   window.__wlResetInstalled = true;
-  setInterval(function () {
-    var cur = window.location.pathname;
-    if (cur !== window.__wlExpectedPath && window.__wlCurrentWid) {
-      try {
-        navigator.sendBeacon(
-          '/api/reset_wishlist/' + window.__wlCurrentWid);
-      } catch (e) {}
-      window.__wlCurrentWid = null;
+
+  function resetIfLeaving() {
+    var wid = window.__wlCurrentWid;
+    if (!wid || !window.__wlExpectedPath) return;
+    try {
+      navigator.sendBeacon(
+        '/api/reset_wishlist/' + wid);
+    } catch (e) {}
+    window.__wlCurrentWid = null;
+  }
+
+  // Navigation interne (SPA) : on vérifie la destination avant
+  // que le routeur ne l'applique.
+  function checkTarget(url) {
+    if (!url || !window.__wlCurrentWid) return;
+    try {
+      var resolved = new URL(String(url), window.location.href).pathname;
+    } catch (e) {
+      return;
     }
-  }, 400);
+    if (resolved !== window.__wlExpectedPath) resetIfLeaving();
+  }
+
+  var origPushState = history.pushState.bind(history);
+  var origReplaceState = history.replaceState.bind(history);
+  history.pushState = function (state, title, url) {
+    checkTarget(url);
+    return origPushState(state, title, url);
+  };
+  history.replaceState = function (state, title, url) {
+    checkTarget(url);
+    return origReplaceState(state, title, url);
+  };
+
+  // Bouton retour / avant du navigateur.
+  window.addEventListener('popstate', function () {
+    setTimeout(function () {
+      if (window.__wlCurrentWid &&
+          window.location.pathname !== window.__wlExpectedPath) {
+        resetIfLeaving();
+      }
+    }, 0);
+  });
+
+  // Fermeture de l'onglet / navigation hors du site.
   window.addEventListener('pagehide', function () {
-    if (window.__wlCurrentWid) {
-      try {
-        navigator.sendBeacon(
-          '/api/reset_wishlist/' + window.__wlCurrentWid);
-      } catch (e) {}
-    }
+    if (window.__wlCurrentWid) resetIfLeaving();
   });
 })();
 </script>''')
@@ -576,11 +613,12 @@ async def _open_offer_dialog(it, refresh_fn):
                   type='positive')
 
 
-def render_offer_zone(it, refresh_fn, is_admin=False):
+def render_offer_zone(it, refresh_fn, my_res, is_admin=False):
+    # `my_res` est lu une seule fois par page (voir page_body),
+    # pas à chaque item rendu.
     reservations = it.get('reservations') or []
     max_offers = it.get('max_offers')
     count = len(reservations)
-    my_res = _my_reservations_set()
     i_reserved = any(r['id'] in my_res for r in reservations)
 
     if max_offers is None:
@@ -636,18 +674,18 @@ def render_offer_zone(it, refresh_fn, is_admin=False):
 # Rendu d'un item
 # ============================================================
 def render_items_grid(items, is_admin, refresh_fn, color,
-                      categories, move_item, wid, show_offers):
+                      categories, move_item, wid, show_offers, my_res):
     with ui.element('div').classes(
         'grid grid-cols-1 lg:grid-cols-2 gap-4 w-full auto-rows-fr'
     ):
         for idx, it in enumerate(items):
             render_item(it, is_admin, refresh_fn, color, categories,
                         move_item, idx == 0,
-                        idx == len(items) - 1, wid, show_offers)
+                        idx == len(items) - 1, wid, show_offers, my_res)
 
 
 def render_item(it, is_admin, refresh_fn, color, categories,
-                move_item, is_first, is_last, wid, show_offers):
+                move_item, is_first, is_last, wid, show_offers, my_res):
     item_bg = (
         f'radial-gradient(circle at center, '
         f'{light_bg(color, "90")} 0%, '
@@ -745,7 +783,7 @@ def render_item(it, is_admin, refresh_fn, color, categories,
         # --- Zone offres : masquée en mode édition (anti-spoiler),
         #     sinon contrôlée par le toggle « Afficher/Masquer ». ---
         if show_offers and not is_admin:
-            render_offer_zone(it, refresh_fn, is_admin)
+            render_offer_zone(it, refresh_fn, my_res, is_admin)
 
 
 def _delete_and_refresh(item_id, refresh_fn):
@@ -1215,10 +1253,20 @@ def wishlist_page(wid: int):
     def page_body():
         nonlocal w
         w = get_wishlist(wid)
+        if w is None:
+            # La liste a disparu pendant la session (ex. supprimée
+            # ailleurs) : on renvoie à l'accueil au lieu de crasher.
+            ui.navigate.to('/')
+            return
         items = get_items_with_links(wid)
         categories = get_categories(wid)
         color = w.get('color') or 'indigo'
         c_solid = solid_css(color)
+
+        # « Mes réservations » : lu une seule fois par rendu de page,
+        # puis passé aux items (au lieu d'une lecture du stockage à
+        # chaque item).
+        my_res = _my_reservations_set()
 
         by_cat = {None: []}
         for c in categories:
@@ -1367,7 +1415,8 @@ def wishlist_page(wid: int):
                         if cat_items:
                             render_items_grid(
                                 cat_items, is_admin, page_body.refresh,
-                                color, categories, move_item, wid, show_offers)
+                                color, categories, move_item, wid,
+                                show_offers, my_res)
 
                         if is_admin:
                             ui.button(
@@ -1390,7 +1439,8 @@ def wishlist_page(wid: int):
                             h.style(f'color: {c_solid} !important;')
                         render_items_grid(
                             by_cat[None], is_admin, page_body.refresh,
-                            color, categories, move_item, wid, show_offers)
+                            color, categories, move_item, wid,
+                            show_offers, my_res)
 
     page_body()
 
