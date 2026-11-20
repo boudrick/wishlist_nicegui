@@ -195,6 +195,14 @@ def update_wishlist(wid, title, owner, description, url, color,
              emoji or None, wid))
 
 
+def update_wishlist_link(wid, wtype, url):
+    """Met à jour le type de liste et l'URL de redirection (admin)."""
+    with connection() as conn:
+        conn.execute(
+            'UPDATE wishlists SET type=?, url=? WHERE id=?',
+            (wtype, (url or '').strip() or None, wid))
+
+
 def set_wishlist_password(wid, password_hash):
     with connection() as conn:
         conn.execute(

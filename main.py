@@ -3,7 +3,7 @@ from nicegui import ui, app
 from db import (
     init_db, hash_password, verify_password,
     get_wishlists, get_wishlist, create_wishlist, update_wishlist,
-    delete_wishlist, set_wishlist_password,
+    update_wishlist_link, delete_wishlist, set_wishlist_password,
     get_categories, create_category, update_category, delete_category,
     swap_category_position,
     get_items_with_links, create_item, update_item, delete_item,
@@ -34,6 +34,11 @@ def render_visual(value, emoji_class='text-3xl', img_class='w-12 h-12'):
             .props('lazy fit=cover')
     else:
         ui.label(v).classes(f'{emoji_class} leading-none')
+
+
+def _is_image_url(value):
+    v = str(value or '').strip().lower()
+    return v.startswith('http://') or v.startswith('https://')
 
 
 def _open_wishlist(wid, url, is_internal):
@@ -172,23 +177,35 @@ def render_header(title='Listes de cadeaux', back_url=None,
 # ============================================================
 # Dialog mot de passe
 # ============================================================
-async def prompt_password(title='Mot de passe requis'):
+async def prompt_password(title='Mot de passe requis', subtitle=None):
     # [MOBILE] largeur plafonnée + padding réduit
     with ui.dialog() as dialog, ui.card().classes(
         'w-96 max-w-[calc(100vw-2rem)] p-4 md:p-6 rounded-2xl'
     ):
         lbl = ui.label(title).classes('text-lg font-bold mb-2')
         lbl.style('color: #1e293b !important;')
+        if subtitle:
+            s = ui.label(subtitle).classes('text-sm mb-3 break-words')
+            s.style('color: #64748b !important;')
         pwd = ui.input('Mot de passe', password=True,
                        password_toggle_button=True) \
             .props('outlined rounded').classes('w-full')
+
+        def submit_password():
+            dialog.submit(pwd.value)
+
+        # La touche Entrée valide le mot de passe.
+        pwd.on('keydown.enter', submit_password)
+
         with ui.row().classes('w-full justify-end gap-2 mt-4'):
             ui.button('Annuler',
                       on_click=lambda: dialog.submit(None)) \
                 .props('flat rounded-lg color=grey-7')
-            ui.button('Valider',
-                      on_click=lambda: dialog.submit(pwd.value)) \
+            ui.button('Valider', on_click=submit_password) \
                 .props('unelevated rounded-lg color=primary')
+
+        # Le champ est prêt à la saisie dès l'ouverture.
+        dialog.on('show', lambda: pwd.run_method('focus'))
     return await dialog
 
 
@@ -649,25 +666,25 @@ def render_offer_zone(it, refresh_fn, my_res, is_admin=False):
         bg, fg = '#fef3c7', '#b45309'
         available = True
 
-    with ui.row().classes(
-        'w-full items-center gap-2 flex-wrap '
-        'pt-2 pb-2 px-3 border-t border-black/5'
-    ):
+    # Bandeau compact : le contenu du cadeau garde la part belle.
+    with ui.row().classes('wl-offer-zone w-full'):
         badge = ui.label(text).classes(
-            'text-xs font-semibold px-2 py-1 rounded-full')
+            'text-[11px] font-semibold px-2 py-0.5 rounded-full')
         badge.style(f'background-color: {bg} !important; '
                     f'color: {fg} !important;')
 
         if reservations:
-            par = ui.label('Offert par :').classes('text-xs')
+            par = ui.label('Offert par').classes(
+                'text-[11px] hidden sm:inline')
             par.style('color: #475569 !important;')
             for r in reservations:
                 nm = r['offerer_name'] or 'anonyme'
                 with ui.element('div').classes(
                     'inline-flex items-center bg-white/80 '
-                    'rounded-full pl-2 pr-0.5 py-0.5'
+                    'rounded-full pl-1.5 pr-0.5 py-0'
                 ):
-                    nl = ui.label(nm).classes('text-xs break-all max-w-[120px]')
+                    nl = ui.label(nm).classes(
+                        'text-[11px] break-all max-w-[110px]')
                     nl.style('color: #475569 !important;')
                     ui.button(
                         icon='close',
@@ -708,7 +725,7 @@ def render_item(it, is_admin, refresh_fn, color, categories,
     )
 
     with ui.element('div').classes(
-        'rounded-2xl flex flex-col overflow-hidden'
+        'wl-item-card rounded-2xl flex flex-col overflow-hidden'
     ).style(
         f'background-color: {light_bg(color, "40")} !important; '
         f'background-image: {item_bg} !important; '
@@ -749,62 +766,55 @@ def render_item(it, is_admin, refresh_fn, color, categories,
                 b_del.classes('hide-label-mobile')
 
         # --- Contenu principal ---
-        # [MOBILE] grille responsive : 2 colonnes sur mobile, 3 sur desktop.
-        # Les liens passent en dessous du titre sur mobile (col-span-2).
-        with ui.element('div').classes(
-            'p-3 md:p-4 grid grid-cols-[56px_1fr] '
-            'md:grid-cols-[64px_1fr_144px] gap-3 items-start'
-        ):
-            with ui.element('div').classes(
-                'w-14 h-14 md:w-16 md:h-16 flex items-center justify-center'
-            ):
-                if it.get('image_url'):
-                    render_visual(it['image_url'],
-                                  emoji_class='text-3xl',
-                                  img_class='w-14 h-14 md:w-16 md:h-16')
+        # L'ordre du DOM est : titre, photo, description, liens.
+        # C'est l'ordre mobile demandé (photo entre titre et description) ;
+        # sur desktop, la grille CSS (.wl-item-body) replace la photo à
+        # gauche et les liens à droite, la photo prenant toute la hauteur.
+        has_media = bool(it.get('image_url'))
+        has_links = bool(it.get('links'))
+        body_classes = 'p-3 md:p-4 wl-item-body'
+        if has_media:
+            body_classes += ' has-media'
+        if has_links:
+            body_classes += ' has-links'
+
+        with ui.element('div').classes(body_classes):
+            t = ui.label(it['name']).classes(
+                'wl-item-title text-base font-bold break-words leading-tight')
+            t.style('color: #1e293b !important;')
+
+            if has_media:
+                visual = str(it['image_url']).strip()
+                if _is_image_url(visual):
+                    with ui.element('div').classes(
+                        'wl-item-media has-image'
+                    ):
+                        ui.image(visual).props('lazy fit=cover') \
+                            .classes('w-full h-full')
                 else:
                     with ui.element('div').classes(
-                        'w-14 h-14 md:w-16 md:h-16 rounded-xl bg-white/60 '
-                        'flex items-center justify-center'
+                        'wl-item-media is-emoji'
                     ):
-                        ui.icon('image').classes(
-                            'text-3xl text-slate-300')
+                        ui.label(visual).classes('text-5xl leading-none')
 
-            with ui.column().classes('min-w-0 gap-1'):
-                t = ui.label(it['name']).classes(
-                    'text-base font-bold break-words leading-tight')
-                t.style('color: #1e293b !important;')
-                if it.get('description'):
-                    d = ui.label(it['description']).classes(
-                        'text-sm break-words leading-snug')
-                    d.style('color: #334155 !important;')
+            if it.get('description'):
+                d = ui.label(it['description']).classes(
+                    'wl-item-desc text-sm break-words leading-snug')
+                d.style('color: #334155 !important;')
 
-            if it.get('links'):
-                # [MOBILE] pleine largeur sous le titre sur mobile
-                with ui.column().classes(
-                    'col-span-2 md:col-span-1 gap-1 w-full'
-                ):
+            if has_links:
+                with ui.column().classes('wl-item-links'):
                     for link in it['links']:
-                        with ui.element('div').classes(
-                            'rounded-lg px-2 py-1 flex items-center '
-                            'justify-between gap-2 w-full '
-                            'overflow-hidden'
-                        ).style(
-                            'background-color: #ffffff !important;'
-                        ):
+                        with ui.element('div').classes('wl-item-link'):
                             lk = ui.link(
-                                link.get('site') or 'Lien',
+                                link.get('site') or link['url'],
                                 link['url'], new_tab=True,
-                            ).classes(
-                                'text-xs font-medium truncate '
-                                'no-underline min-w-0 flex-1')
+                            ).classes('site')
                             lk.style('color: #4338ca !important;')
                             if link.get('price') is not None:
                                 p = ui.label(
                                     f"{link['price']:.0f}€"
-                                ).classes(
-                                    'text-xs font-bold '
-                                    'whitespace-nowrap flex-shrink-0')
+                                ).classes('price')
                                 p.style('color: #059669 !important;')
 
         # --- Zone offres : masquée en mode édition (anti-spoiler),
@@ -1120,6 +1130,223 @@ def add_page():
 
 
 # ============================================================
+# Administration — accès masqué par /admin
+# (aucun lien dans l'interface, page en noindex)
+# ============================================================
+def _admin_badge(text, bg, fg):
+    b = ui.label(text).classes(
+        'text-[11px] font-semibold px-2 py-0.5 rounded-full')
+    b.style(f'background-color: {bg} !important; '
+            f'color: {fg} !important;')
+
+
+async def admin_edit_link_dialog(w, refresh_fn):
+    with ui.dialog() as dialog, ui.card().classes(
+        'w-[560px] max-w-[calc(100vw-1rem)] p-4 md:p-6 rounded-2xl '
+        'max-h-[90vh] overflow-y-auto'
+    ):
+        t = ui.label('Lien et redirection').classes(
+            'text-lg font-bold')
+        t.style('color: #1e293b !important;')
+        sub = ui.label(w['title']).classes('text-sm mb-4 break-words')
+        sub.style('color: #64748b !important;')
+
+        kind = ui.radio(
+            {'internal': 'Interne (page de ce site)',
+             'external': 'Externe (autre site)'},
+            value=w['type'],
+        ).props('inline')
+
+        url = ui.input('URL de redirection',
+                       value=w.get('url') or '',
+                       placeholder='https://...') \
+            .props('outlined rounded').classes('w-full mt-3')
+        url.set_visibility(w['type'] == 'external')
+        kind.on_value_change(
+            lambda e: url.set_visibility(e.value == 'external'))
+
+        def save():
+            value = (url.value or '').strip()
+            if kind.value == 'external':
+                if not value:
+                    ui.notify('URL requise pour une redirection externe',
+                              type='negative')
+                    return
+                if not (value.startswith('http://')
+                        or value.startswith('https://')):
+                    ui.notify(
+                        'URL invalide (http:// ou https:// attendu)',
+                        type='negative')
+                    return
+            update_wishlist_link(w['id'], kind.value, value or None)
+            dialog.submit(True)
+
+        with ui.row().classes('w-full justify-end gap-2 mt-4'):
+            ui.button('Annuler',
+                      on_click=lambda: dialog.submit(None)) \
+                .props('flat rounded-lg color=grey-7')
+            ui.button('Enregistrer', icon='check', on_click=save) \
+                .props('unelevated rounded-lg color=primary')
+
+    if await dialog:
+        refresh_fn()
+        ui.notify('Lien mis à jour.', type='positive')
+
+
+async def admin_reset_password_dialog(w, refresh_fn):
+    with ui.dialog() as dialog, ui.card().classes(
+        'w-96 max-w-[calc(100vw-2rem)] p-4 md:p-6 rounded-2xl'
+    ):
+        t = ui.label('Supprimer le mot de passe ?').classes(
+            'text-lg font-bold')
+        t.style('color: #1e293b !important;')
+        s = ui.label(
+            f"Le mot de passe de « {w['title']} » sera effacé. "
+            "La personne pourra définir un nouveau mot de passe en "
+            "passant en mode édition sur sa page.") \
+            .classes('text-sm mt-2 mb-4 break-words')
+        s.style('color: #64748b !important;')
+        with ui.row().classes('w-full justify-end gap-2'):
+            ui.button('Annuler',
+                      on_click=lambda: dialog.submit(False)) \
+                .props('flat rounded-lg color=grey-7')
+            ui.button('Supprimer le mot de passe', icon='lock_reset',
+                      on_click=lambda: dialog.submit(True)) \
+                .props('unelevated rounded-lg color=negative')
+
+    if await dialog:
+        set_wishlist_password(w['id'], None)
+        refresh_fn()
+        ui.notify('Mot de passe supprimé.', type='positive')
+
+
+async def admin_delete_wishlist_dialog(w, refresh_fn):
+    with ui.dialog() as dialog, ui.card().classes(
+        'w-96 max-w-[calc(100vw-2rem)] p-4 md:p-6 rounded-2xl'
+    ):
+        t = ui.label('Supprimer cette liste ?').classes(
+            'text-lg font-bold')
+        t.style('color: #1e293b !important;')
+        s = ui.label(
+            f"« {w['title']} » et tous ses cadeaux seront supprimés. "
+            "Cette action est irréversible.") \
+            .classes('text-sm mt-2 mb-4 break-words')
+        s.style('color: #64748b !important;')
+        with ui.row().classes('w-full justify-end gap-2'):
+            ui.button('Annuler',
+                      on_click=lambda: dialog.submit(False)) \
+                .props('flat rounded-lg color=grey-7')
+            ui.button('Supprimer', icon='delete',
+                      on_click=lambda: dialog.submit(True)) \
+                .props('unelevated rounded-lg color=negative')
+
+    if await dialog:
+        delete_wishlist(w['id'])
+        refresh_fn()
+        ui.notify('Liste supprimée.', type='info')
+
+
+def render_admin_wishlist_row(w, item_count, refresh_fn):
+    is_internal = w['type'] == 'internal'
+    has_pwd = bool(w.get('password'))
+
+    with ui.element('div').classes('soft-card p-4 md:p-5 w-full'):
+        with ui.row().classes(
+            'w-full items-start justify-between gap-3 flex-wrap'
+        ):
+            with ui.column().classes('gap-1 min-w-0 flex-1'):
+                t = ui.label(w['title']).classes(
+                    'text-lg font-bold break-words')
+                t.style('color: #1e293b !important;')
+                m = ui.label(
+                    f"Propriétaire : {w['owner']} · {item_count} "
+                    f"cadeau{'x' if item_count != 1 else ''}") \
+                    .classes('text-xs')
+                m.style('color: #64748b !important;')
+                with ui.row().classes(
+                    'gap-2 flex-wrap items-center mt-1'
+                ):
+                    _admin_badge('Interne' if is_internal else 'Externe',
+                                 '#e0e7ff', '#4338ca')
+                    _admin_badge(
+                        'Mot de passe défini' if has_pwd
+                        else 'Sans mot de passe',
+                        '#d1fae5' if has_pwd else '#fef3c7',
+                        '#047857' if has_pwd else '#b45309')
+                if not is_internal and w.get('url'):
+                    lk = ui.link(w['url'], w['url'], new_tab=True) \
+                        .classes('text-xs break-all')
+                    lk.style('color: #4338ca !important;')
+
+            with ui.row().classes(
+                'gap-1 flex-wrap items-center justify-start md:justify-end '
+                'w-full md:w-auto'
+            ):
+                ui.button('Ouvrir', icon='open_in_new',
+                          on_click=lambda: _open_wishlist(
+                              w['id'], w.get('url'), is_internal)) \
+                    .props('flat dense no-caps color=primary')
+                ui.button('Lien', icon='link',
+                          on_click=lambda:
+                              admin_edit_link_dialog(w, refresh_fn)) \
+                    .props('flat dense no-caps color=primary')
+                if has_pwd:
+                    ui.button(
+                        'Mot de passe', icon='lock_reset',
+                        on_click=lambda:
+                            admin_reset_password_dialog(w, refresh_fn),
+                    ).props('flat dense no-caps color=warning')
+                ui.button('Supprimer', icon='delete',
+                          on_click=lambda:
+                              admin_delete_wishlist_dialog(w, refresh_fn)) \
+                    .props('flat dense no-caps color=negative')
+
+
+@ui.page('/admin')
+def admin_page():
+    apply_theme()
+    # Page réservée : pas d'indexation par les moteurs de recherche.
+    ui.add_head_html('<meta name="robots" content="noindex, nofollow">')
+
+    with page_container():
+        with ui.row().classes(
+            'w-full items-center justify-between gap-3 flex-wrap mt-4'
+        ):
+            with ui.column().classes('gap-0'):
+                t = ui.label('Administration').classes(
+                    'text-2xl md:text-3xl font-extrabold')
+                t.style('color: #1e293b !important;')
+                s = ui.label(
+                    'Accès masqué : ne partagez pas cette URL.') \
+                    .classes('text-sm')
+                s.style('color: #64748b !important;')
+            ui.button('Retour au site', icon='arrow_back',
+                      on_click=lambda: ui.navigate.to('/')) \
+                .props('flat no-caps rounded-full color=primary')
+
+        @ui.refreshable
+        def lists_panel():
+            wishlists = get_wishlists()
+            counts = get_item_counts()
+            if not wishlists:
+                with ui.column().classes(
+                    'w-full items-center justify-center py-16 gap-3'
+                ):
+                    ui.icon('inventory_2').classes(
+                        'text-6xl text-slate-300')
+                    empty = ui.label('Aucune liste dans la base.') \
+                        .classes('text-xl font-semibold')
+                    empty.style('color: #334155 !important;')
+                return
+            with ui.column().classes('w-full gap-3'):
+                for w in wishlists:
+                    render_admin_wishlist_row(
+                        w, counts.get(w['id'], 0), lists_panel.refresh)
+
+        lists_panel()
+
+
+# ============================================================
 # Page détail wishlist
 # ============================================================
 @ui.page('/wishlist/{wid}')
@@ -1176,11 +1403,22 @@ def wishlist_page(wid: int):
         page_body.refresh()
 
     async def ask_password():
-        pwd = await prompt_password()
+        nonlocal w
+        # On relit la liste : le mot de passe a pu être réinitialisé
+        # depuis la page d'administration entre-temps.
+        w = get_wishlist(wid) or w
+        if w.get('password'):
+            pwd = await prompt_password()
+        else:
+            pwd = await prompt_password(
+                "Créer le mot de passe d'édition",
+                "Cette liste n'a pas encore de mot de passe. "
+                "Choisissez-en un : il sera demandé pour la modifier.")
         if not pwd:
             return
-        if not w['password']:
+        if not w.get('password'):
             set_wishlist_password(wid, hash_password(pwd))
+            w = get_wishlist(wid) or w
             set_admin(True)
             ui.notify('Mot de passe défini, mode édition activé.',
                       type='positive')
@@ -1237,6 +1475,47 @@ def wishlist_page(wid: int):
                 w.get('color') or 'indigo')
             render_picker(size='w-8 h-8')
 
+            # --- Mot de passe d'édition (comme à la création) ---
+            ui.separator().classes('my-4')
+            lb_pw = ui.label("Mot de passe d'édition").classes(
+                'text-sm font-semibold mb-2')
+            lb_pw.style('color: #334155 !important;')
+            if w.get('password'):
+                st_pw = ui.label(
+                    'Un mot de passe est défini. Laissez les champs '
+                    'vides pour le conserver.')
+            else:
+                st_pw = ui.label(
+                    "Aucun mot de passe défini : la personne pourra en "
+                    "choisir un en passant en mode édition.")
+            st_pw.classes('text-xs mb-3 break-words')
+            st_pw.style('color: #64748b !important;')
+
+            new_pwd = ui.input('Nouveau mot de passe', password=True,
+                               password_toggle_button=True) \
+                .props('outlined rounded').classes('w-full')
+            new_pwd2 = ui.input('Confirmer le nouveau mot de passe',
+                                password=True,
+                                password_toggle_button=True) \
+                .props('outlined rounded').classes('w-full mt-3')
+            pw_hint = ui.label('').classes('text-xs h-4 mt-1')
+
+            def check_pw_match(e=None):
+                v1 = new_pwd.value or ''
+                v2 = new_pwd2.value or ''
+                if not v2:
+                    pw_hint.text = ''
+                    pw_hint.style('color: transparent;')
+                elif v1 == v2:
+                    pw_hint.text = '✓ Les mots de passe correspondent'
+                    pw_hint.style('color: #10b981 !important;')
+                else:
+                    pw_hint.text = '✗ Les mots de passe ne correspondent pas'
+                    pw_hint.style('color: #ef4444 !important;')
+
+            new_pwd.on_value_change(check_pw_match)
+            new_pwd2.on_value_change(check_pw_match)
+
             async def delete_wishlist_dialog():
                 # [MOBILE] largeur plafonnée
                 with ui.dialog() as confirm, ui.card().classes(
@@ -1263,17 +1542,36 @@ def wishlist_page(wid: int):
                     ui.navigate.to('/')
 
             def save():
+                title_value = (t.value or '').strip()
+                if not title_value:
+                    ui.notify('Titre requis', type='negative')
+                    return
+                p1 = new_pwd.value or ''
+                p2 = new_pwd2.value or ''
+                if p1 or p2:
+                    if not p1:
+                        ui.notify('Nouveau mot de passe requis',
+                                  type='negative')
+                        return
+                    if p1 != p2:
+                        ui.notify('Les mots de passe ne correspondent pas',
+                                  type='negative')
+                        return
                 update_wishlist(
-                    wid, t.value.strip(), t.value.strip(),
+                    wid, title_value, title_value,
                     d.value.strip() or None,
                     u.value.strip() or None,
                     get_color(),
                     (visual_in.value or '').strip() or None)
+                if p1:
+                    set_wishlist_password(wid, hash_password(p1))
                 dialog.submit(True)
 
-            # [MOBILE] boutons wrap
+            # [MOBILE] boutons wrap ; le pied reste visible pendant
+            # le défilement du formulaire.
             with ui.row().classes(
-                'w-full justify-between items-center mt-6 flex-wrap gap-2'
+                'wl-dialog-footer w-full justify-between items-center '
+                'mt-6 pt-3 flex-wrap gap-2'
             ):
                 ui.button('Supprimer', icon='delete',
                           on_click=delete_wishlist_dialog) \

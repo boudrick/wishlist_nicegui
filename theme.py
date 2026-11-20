@@ -35,6 +35,158 @@ HEAD_HTML = '''
       padding-right: 6px !important;
     }
   }
+
+  /* ============================================================
+     Carte cadeau
+     - mobile : titre, photo, description, liens (dans cet ordre)
+     - desktop : photo pleine hauteur à gauche, titre/description au
+       centre (la zone la plus large), liens à droite.
+     - sans photo et/ou sans lien : titre + description pleine largeur.
+     ============================================================ */
+  .wl-item-body {
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .wl-item-title { order: 1; }
+  .wl-item-media { order: 2; }
+  .wl-item-desc { order: 3; }
+  .wl-item-links {
+    order: 4;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    width: 100%;
+  }
+
+  .wl-item-media {
+    width: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+    background-color: rgba(255, 255, 255, .55);
+  }
+  .wl-item-media.has-image {
+    aspect-ratio: 16 / 10;
+    max-height: 240px;
+  }
+  .wl-item-media.is-emoji {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 72px;
+  }
+  .wl-item-media .q-img {
+    width: 100%;
+    height: 100%;
+  }
+  .wl-item-media img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-height: 240px;
+    object-fit: cover;
+  }
+
+  /* Nom du site + prix : jamais tronqués (le nom peut passer à la
+     ligne, le prix reste toujours entier). */
+  .wl-item-link {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .2rem .5rem;
+    width: 100%;
+    border-radius: 8px;
+    padding: .25rem .5rem;
+    background-color: #ffffff;
+  }
+  .wl-item-link .site {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: .75rem;
+    font-weight: 500;
+    line-height: 1.3;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-decoration: none;
+  }
+  .wl-item-link .price {
+    flex: 0 0 auto;
+    font-size: .75rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  /* Pied d'actions des longues fenêtres de dialogue : reste visible
+     même quand le formulaire défile. */
+  .wl-dialog-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background-color: #ffffff;
+  }
+
+  /* Statut des offres : bandeau compact pour laisser la part belle
+     au cadeau lui-même. */
+  .wl-offer-zone {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .3rem;
+    flex: 0 0 auto;
+    padding: .35rem .75rem;
+    border-top: 1px solid rgba(0, 0, 0, .05);
+  }
+
+  @media (min-width: 768px) {
+    .wl-item-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto 1fr;
+      grid-template-areas:
+        "title"
+        "desc";
+      align-items: start;
+    }
+    .wl-item-body.has-media {
+      grid-template-columns: 112px minmax(0, 1fr);
+      grid-template-areas:
+        "media title"
+        "media desc";
+    }
+    .wl-item-body.has-links {
+      grid-template-columns: minmax(0, 1fr) 190px;
+      grid-template-areas:
+        "title links"
+        "desc links";
+    }
+    .wl-item-body.has-media.has-links {
+      grid-template-columns: 112px minmax(0, 1fr) 190px;
+      grid-template-areas:
+        "media title links"
+        "media desc links";
+    }
+
+    .wl-item-title { grid-area: title; }
+    .wl-item-desc { grid-area: desc; }
+    .wl-item-links { grid-area: links; }
+
+    .wl-item-media {
+      grid-area: media;
+      height: 100%;
+      /* La photo occupe toute la hauteur du contenu du cadeau. */
+      min-height: 150px;
+      max-height: none;
+      aspect-ratio: auto;
+    }
+    .wl-item-media img {
+      height: 100%;
+      max-height: none;
+    }
+  }
 </style>
 '''
 
