@@ -159,7 +159,9 @@ def render_header(title='Listes de cadeaux', back_url=None,
         emoji = ui.label('🎁').classes('text-3xl')
         emoji.style('color: #ffffff !important;')
 
-    lbl = ui.label(title).classes('text-2xl font-extrabold tracking-tight')
+    # [MOBILE] police plus petite sur mobile
+    lbl = ui.label(title).classes(
+        'text-xl md:text-2xl font-extrabold tracking-tight')
     lbl.style('color: #ffffff !important;')
 
     ui.space()
@@ -171,7 +173,10 @@ def render_header(title='Listes de cadeaux', back_url=None,
 # Dialog mot de passe
 # ============================================================
 async def prompt_password(title='Mot de passe requis'):
-    with ui.dialog() as dialog, ui.card().classes('w-96 p-6 rounded-2xl'):
+    # [MOBILE] largeur plafonnée + padding réduit
+    with ui.dialog() as dialog, ui.card().classes(
+        'w-96 max-w-[calc(100vw-2rem)] p-4 md:p-6 rounded-2xl'
+    ):
         lbl = ui.label(title).classes('text-lg font-bold mb-2')
         lbl.style('color: #1e293b !important;')
         pwd = ui.input('Mot de passe', password=True,
@@ -218,8 +223,9 @@ def color_picker(initial='indigo'):
 
     async def open_custom():
         default_val = state['custom'] or '#6366f1'
+        # [MOBILE] largeur plafonnée + padding réduit
         with ui.dialog() as dialog, ui.card().classes(
-            'w-96 p-6 rounded-2xl'
+            'w-96 max-w-[calc(100vw-2rem)] p-4 md:p-6 rounded-2xl'
         ):
             t = ui.label('Couleur personnalisée').classes(
                 'text-lg font-bold mb-3')
@@ -305,7 +311,8 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
 
     # Row 2 : 3 colonnes responsives
     with ui.element('div').classes(
-        'grid grid-cols-1 md:grid-cols-[120px_1fr_400px] '
+        # [MOBILE] colonnes réduites, devient 1 colonne sous md
+        'grid grid-cols-1 md:grid-cols-[100px_1fr_360px] '
         'gap-3 items-start w-full mt-3'
     ):
         # Col 1 : visual
@@ -345,19 +352,20 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
                         'w-full items-center gap-1 no-wrap '
                         'bg-slate-50 rounded-lg p-2'
                     ) as box:
+                        # [MOBILE] largeurs minimales réduites
                         site = ui.input(
                             placeholder='Site', value=site_val,
                         ).props('outlined rounded dense') \
-                            .classes('flex-1 min-w-[70px]')
+                            .classes('flex-1 min-w-[60px]')
                         url = ui.input(
                             placeholder='https://...', value=url_val,
                         ).props('outlined rounded dense') \
-                            .classes('flex-[2] min-w-[90px]')
+                            .classes('flex-[2] min-w-[80px]')
                         price = ui.number(
                             placeholder='€', value=price_val,
                             format='%.2f',
                         ).props('outlined rounded dense') \
-                            .classes('w-16 flex-shrink-0')
+                            .classes('w-14 flex-shrink-0')
 
                         entry = {'site': site, 'url': url,
                                  'price': price, 'box': box}
@@ -455,9 +463,10 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
 # ============================================================
 async def open_add_item_dialog(wid, categories, refresh_fn,
                                default_category_id=None):
+    # [MOBILE] largeur plafonnée + padding adaptatif
     with ui.dialog() as dialog, ui.card().classes(
-        'w-[1150px] max-w-full p-6 rounded-2xl max-h-[90vh] '
-        'overflow-y-auto'
+        'w-[1150px] max-w-[calc(100vw-1rem)] p-4 md:p-6 rounded-2xl '
+        'max-h-[90vh] overflow-y-auto'
     ):
         lbl = ui.label('Ajouter un cadeau').classes(
             'text-lg font-bold mb-4')
@@ -478,7 +487,7 @@ async def open_add_item_dialog(wid, categories, refresh_fn,
             dialog.submit(True)
 
         with ui.row().classes(
-            'w-full justify-between items-center mt-4'
+            'w-full justify-between items-center mt-4 flex-wrap gap-2'
         ):
             ui.button('Annuler',
                       on_click=lambda: dialog.submit(None)) \
@@ -493,9 +502,10 @@ async def open_add_item_dialog(wid, categories, refresh_fn,
 
 
 async def open_edit_item_dialog(item, categories, refresh_fn):
+    # [MOBILE] largeur plafonnée + padding adaptatif
     with ui.dialog() as dialog, ui.card().classes(
-        'w-[1150px] max-w-full p-6 rounded-2xl max-h-[90vh] '
-        'overflow-y-auto'
+        'w-[1150px] max-w-[calc(100vw-1rem)] p-4 md:p-6 rounded-2xl '
+        'max-h-[90vh] overflow-y-auto'
     ):
         lbl = ui.label('Modifier le cadeau').classes(
             'text-lg font-bold mb-4')
@@ -515,7 +525,7 @@ async def open_edit_item_dialog(item, categories, refresh_fn):
             dialog.submit(True)
 
         with ui.row().classes(
-            'w-full justify-between items-center mt-4'
+            'w-full justify-between items-center mt-4 flex-wrap gap-2'
         ):
             ui.button('Annuler',
                       on_click=lambda: dialog.submit(None)) \
@@ -532,16 +542,19 @@ async def open_edit_item_dialog(item, categories, refresh_fn):
 # Dialog ajout de catégorie
 # ============================================================
 async def open_add_category_dialog(wid, refresh_fn):
+    # [MOBILE] largeur plafonnée + padding réduit
     with ui.dialog() as dialog, ui.card().classes(
-        'w-[600px] max-w-full p-6 rounded-2xl'
+        'w-[600px] max-w-[calc(100vw-1rem)] p-4 md:p-6 rounded-2xl'
     ):
         lbl = ui.label('Ajouter une catégorie').classes(
             'text-lg font-bold mb-4')
         lbl.style('color: #1e293b !important;')
 
         with ui.row().classes('w-full items-center gap-2'):
+            # [MOBILE] input visuel plus étroit
             visual_in = ui.input(placeholder='🎁 ou https://...') \
-                .props('outlined rounded dense').classes('w-40')
+                .props('outlined rounded dense') \
+                .classes('w-28 md:w-40')
             name_in = ui.input(placeholder='Nom de la catégorie') \
                 .props('outlined rounded dense').classes('flex-1')
 
@@ -577,13 +590,15 @@ def _remove_reservation(res_id, refresh_fn):
 
 
 async def _open_offer_dialog(it, refresh_fn):
+    # [MOBILE] largeur plafonnée + padding réduit
     with ui.dialog() as dialog, ui.card().classes(
-        'w-96 p-6 rounded-2xl'
+        'w-96 max-w-[calc(100vw-2rem)] p-4 md:p-6 rounded-2xl'
     ):
         lbl = ui.label("J'offre ce cadeau").classes(
             'text-lg font-bold mb-1')
         lbl.style('color: #1e293b !important;')
-        sub = ui.label(f'« {it["name"]} »').classes('text-sm mb-4')
+        sub = ui.label(f'« {it["name"]} »').classes(
+            'text-sm mb-4 break-words')
         sub.style('color: #64748b !important;')
 
         name_input = ui.input(
@@ -652,7 +667,7 @@ def render_offer_zone(it, refresh_fn, my_res, is_admin=False):
                     'inline-flex items-center bg-white/80 '
                     'rounded-full pl-2 pr-0.5 py-0.5'
                 ):
-                    nl = ui.label(nm).classes('text-xs')
+                    nl = ui.label(nm).classes('text-xs break-all max-w-[120px]')
                     nl.style('color: #475569 !important;')
                     ui.button(
                         icon='close',
@@ -702,18 +717,22 @@ def render_item(it, is_admin, refresh_fn, color, categories,
         # --- Barre d'actions (admin uniquement) ---
         if is_admin:
             with ui.row().classes(
-                'w-full items-center justify-between px-2 pt-1 pb-0 border-b border-black/5'
+                'w-full items-center justify-between gap-1 px-2 pt-1 pb-0 '
+                'border-b border-black/5 flex-wrap'
             ):
-                with ui.row().classes('gap-0 items-center'):
+                with ui.row().classes('gap-0 items-center flex-wrap'):
                     b_up = ui.button(
                         icon='arrow_upward', text='Monter',
                         on_click=lambda: move_item(it['id'], 'up'))
                     b_up.props('flat dense no-caps color=primary size=sm')
+                    # [MOBILE] texte masqué sur mobile
+                    b_up.classes('hide-label-mobile')
                     b_up.set_enabled(not is_first)
                     b_dn = ui.button(
                         icon='arrow_downward', text='Descendre',
                         on_click=lambda: move_item(it['id'], 'down'))
                     b_dn.props('flat dense no-caps color=primary size=sm')
+                    b_dn.classes('hide-label-mobile')
                     b_dn.set_enabled(not is_last)
                     b_ed = ui.button(
                         icon='edit', text='Modifier',
@@ -721,30 +740,37 @@ def render_item(it, is_admin, refresh_fn, color, categories,
                             open_edit_item_dialog(item, categories,
                                                   refresh_fn))
                     b_ed.props('flat dense no-caps color=primary size=sm')
+                    b_ed.classes('hide-label-mobile')
                 b_del = ui.button(
                     icon='delete', text='Supprimer',
                     on_click=lambda i=it['id']:
                         _delete_and_refresh(i, refresh_fn))
                 b_del.props('flat dense no-caps color=negative size=sm')
+                b_del.classes('hide-label-mobile')
 
         # --- Contenu principal ---
-        with ui.element('div').classes('p-4 flex gap-3 items-start'):
+        # [MOBILE] grille responsive : 2 colonnes sur mobile, 3 sur desktop.
+        # Les liens passent en dessous du titre sur mobile (col-span-2).
+        with ui.element('div').classes(
+            'p-3 md:p-4 grid grid-cols-[56px_1fr] '
+            'md:grid-cols-[64px_1fr_144px] gap-3 items-start'
+        ):
             with ui.element('div').classes(
-                'flex-shrink-0 w-16 h-16 flex items-center justify-center'
+                'w-14 h-14 md:w-16 md:h-16 flex items-center justify-center'
             ):
                 if it.get('image_url'):
                     render_visual(it['image_url'],
                                   emoji_class='text-3xl',
-                                  img_class='w-16 h-16')
+                                  img_class='w-14 h-14 md:w-16 md:h-16')
                 else:
                     with ui.element('div').classes(
-                        'w-16 h-16 rounded-xl bg-white/60 flex '
-                        'items-center justify-center'
+                        'w-14 h-14 md:w-16 md:h-16 rounded-xl bg-white/60 '
+                        'flex items-center justify-center'
                     ):
                         ui.icon('image').classes(
                             'text-3xl text-slate-300')
 
-            with ui.column().classes('flex-1 min-w-0 gap-1'):
+            with ui.column().classes('min-w-0 gap-1'):
                 t = ui.label(it['name']).classes(
                     'text-base font-bold break-words leading-tight')
                 t.style('color: #1e293b !important;')
@@ -754,8 +780,9 @@ def render_item(it, is_admin, refresh_fn, color, categories,
                     d.style('color: #334155 !important;')
 
             if it.get('links'):
+                # [MOBILE] pleine largeur sous le titre sur mobile
                 with ui.column().classes(
-                    'w-36 flex-shrink-0 gap-1'
+                    'col-span-2 md:col-span-1 gap-1 w-full'
                 ):
                     for link in it['links']:
                         with ui.element('div').classes(
@@ -797,19 +824,23 @@ def _delete_and_refresh(item_id, refresh_fn):
 # ============================================================
 def render_category_header_editable(cat, idx, total, move_cat,
                                     del_cat, refresh_fn, color):
+    # [MOBILE] flex-wrap + padding réduit
     with ui.row().classes(
-        'w-full items-center gap-2 rounded-2xl px-4 py-3 mt-4'
+        'w-full items-center gap-2 rounded-2xl px-3 md:px-4 py-2 md:py-3 '
+        'mt-4 flex-wrap'
     ).style(
         'background-color: #ffffff !important; '
         'background-image: radial-gradient(circle at center, '
         '#ffffff 0%, #f1f5f9 100%) !important; '
         'box-shadow: 0 1px 3px rgba(0,0,0,0.04);'
     ):
+        # [MOBILE] input visuel plus étroit
         visual_in = ui.input(
             value=cat.get('emoji') or '', placeholder='🎁',
-        ).props('outlined rounded dense').classes('w-24')
+        ).props('outlined rounded dense').classes('w-20 md:w-24')
         name_in = ui.input(value=cat['name']) \
-            .props('outlined rounded dense').classes('flex-1')
+            .props('outlined rounded dense') \
+            .classes('flex-1 min-w-[120px]')
 
         b_up = ui.button(icon='arrow_upward',
                          on_click=lambda: move_cat(cat['id'], 'up'))
@@ -842,7 +873,8 @@ def render_category_header_public(cat, color_solid):
     with ui.row().classes('items-center gap-2 mt-4'):
         render_visual(cat.get('emoji'), emoji_class='text-2xl',
                       img_class='w-8 h-8')
-        h = ui.label(cat['name']).classes('text-lg font-semibold')
+        h = ui.label(cat['name']).classes(
+            'text-lg font-semibold break-words min-w-0')
         h.style(f'color: {color_solid} !important;')
 
 
@@ -862,14 +894,15 @@ def home():
         ui.navigate.to('/')
 
     with page_container():
+        # [MOBILE] titre + boutons adaptatifs
         with ui.row().classes(
-            'w-full items-center justify-between mt-4 mb-2'
+            'w-full items-center justify-between mt-4 mb-2 gap-3 flex-wrap'
         ):
             sec = ui.label('Listes de cadeaux').classes(
-                'text-3xl font-extrabold')
+                'text-2xl md:text-3xl font-extrabold')
             sec.style('color: #1e293b !important;')
 
-            with ui.row().classes('gap-3 items-center'):
+            with ui.row().classes('gap-3 items-center flex-wrap'):
                 if not has_demo_data():
                     b1 = ui.button('Exemples', icon='auto_awesome',
                                    on_click=load_demo)
@@ -880,11 +913,11 @@ def home():
 
         if not wishlists:
             with ui.column().classes(
-                'w-full items-center justify-center py-16 gap-4'
+                'w-full items-center justify-center py-16 gap-4 px-2'
             ):
                 ui.icon('inventory_2').classes('text-6xl text-slate-300')
                 t = ui.label('Aucune liste pour le moment').classes(
-                    'text-xl font-semibold')
+                    'text-xl font-semibold text-center')
                 t.style('color: #334155 !important;')
                 s = ui.label('Créez votre première liste ou '
                              'chargez un exemple pour explorer.') \
@@ -904,7 +937,7 @@ def home():
         counts = get_item_counts()
         with ui.element('div').classes(
             'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 '
-            'gap-6 w-full auto-rows-fr'
+            'gap-4 md:gap-6 w-full auto-rows-fr'
         ):
             for w in wishlists:
                 render_wishlist_card(w, counts.get(w['id'], 0))
@@ -924,7 +957,7 @@ def render_wishlist_card(w, item_count):
 
     with card:
         band = ui.element('div').classes(
-            'px-5 py-6 flex items-center gap-3'
+            'px-4 md:px-5 py-5 md:py-6 flex items-center gap-3'
         )
         apply_gradient(band, color)
         with band:
@@ -965,9 +998,10 @@ def add_page():
 
     with page_container():
         with ui.element('div').classes(
-            'soft-card p-6 md:p-8 max-w-2xl mx-auto w-full'
+            'soft-card p-4 md:p-6 lg:p-8 max-w-2xl mx-auto w-full'
         ):
-            t = ui.label('Créer une liste').classes('text-2xl font-bold')
+            t = ui.label('Créer une liste').classes(
+                'text-xl md:text-2xl font-bold')
             t.style('color: #1e293b !important;')
             s = ui.label('Remplissez les informations ci-dessous.') \
                 .classes('mb-6')
@@ -1100,14 +1134,15 @@ def wishlist_page(wid: int):
         render_header('Liste introuvable', back_url='/')
         with page_container():
             with ui.column().classes(
-                'w-full items-center justify-center py-16 gap-3'
+                'w-full items-center justify-center py-16 gap-3 px-2'
             ):
                 ui.icon('error').classes('text-6xl text-slate-300')
                 t = ui.label('Liste introuvable').classes(
-                    'text-xl font-semibold')
+                    'text-xl font-semibold text-center')
                 t.style('color: #334155 !important;')
                 s = ui.label("Cette liste n'existe pas ou a été "
-                             "supprimée.").classes('text-center max-w-md')
+                             "supprimée.").classes(
+                                 'text-center max-w-md')
                 s.style('color: #64748b !important;')
         return
 
@@ -1171,8 +1206,10 @@ def wishlist_page(wid: int):
         b.classes('shadow-md')
 
     async def edit_wishlist_dialog():
+        # [MOBILE] largeur plafonnée
         with ui.dialog() as dialog, ui.card().classes(
-            'w-[520px] p-6 rounded-2xl max-h-[90vh] overflow-y-auto'
+            'w-[520px] max-w-[calc(100vw-1rem)] p-4 md:p-6 rounded-2xl '
+            'max-h-[90vh] overflow-y-auto'
         ):
             t0 = ui.label('Modifier la liste').classes(
                 'text-lg font-bold mb-4')
@@ -1201,8 +1238,9 @@ def wishlist_page(wid: int):
             render_picker(size='w-8 h-8')
 
             async def delete_wishlist_dialog():
+                # [MOBILE] largeur plafonnée
                 with ui.dialog() as confirm, ui.card().classes(
-                    'w-96 p-6 rounded-2xl'
+                    'w-96 max-w-[calc(100vw-2rem)] p-4 md:p-6 rounded-2xl'
                 ):
                     t1 = ui.label('Supprimer cette liste ?').classes(
                         'text-lg font-bold')
@@ -1233,13 +1271,14 @@ def wishlist_page(wid: int):
                     (visual_in.value or '').strip() or None)
                 dialog.submit(True)
 
+            # [MOBILE] boutons wrap
             with ui.row().classes(
-                'w-full justify-between items-center mt-6'
+                'w-full justify-between items-center mt-6 flex-wrap gap-2'
             ):
                 ui.button('Supprimer', icon='delete',
                           on_click=delete_wishlist_dialog) \
                     .props('flat rounded-lg color=negative')
-                with ui.row().classes('gap-2'):
+                with ui.row().classes('gap-2 flex-wrap'):
                     ui.button('Annuler',
                               on_click=lambda: dialog.submit(None)) \
                         .props('flat rounded-lg color=grey-7')
@@ -1297,43 +1336,46 @@ def wishlist_page(wid: int):
             with page_container():
                 # Barre : Accueil + Mode édition
                 with ui.row().classes(
-                        'w-full items-center justify-between gap-2'
+                    'w-full items-center justify-between gap-2 flex-wrap'
                 ):
                     back = ui.button('Accueil', icon='arrow_back',
                                      on_click=lambda: ui.navigate.to('/'))
                     back.props('flat no-caps rounded-full')
                     back.style(f'color: {c_solid} !important;')
 
-                    with ui.row().classes('gap-2 items-center'):
+                    with ui.row().classes('gap-2 items-center flex-wrap'):
                         admin_button()
 
                 # Titre + description
                 with ui.element('div').classes(
-                    'p-6 md:p-8 rounded-2xl w-full'
+                    'p-4 md:p-6 lg:p-8 rounded-2xl w-full'
                 ).style(
                     f'background-color: {light_bg(color, "60")} !important; '
                     'box-shadow: 0 4px 12px -4px rgba(0,0,0,0.06);'
                 ):
                     with ui.row().classes(
-                        'w-full items-start justify-between gap-4'
+                        'w-full items-start justify-between gap-4 flex-wrap'
                     ):
                         with ui.row().classes(
-                            'items-start gap-3 flex-1'
+                            'items-start gap-3 flex-1 min-w-0'
                         ):
                             render_visual(
                                 w.get('emoji'),
-                                emoji_class='text-4xl',
-                                img_class='w-14 h-14')
+                                emoji_class='text-3xl md:text-4xl',
+                                img_class='w-12 h-12 md:w-14 md:h-14')
                             with ui.column().classes(
                                 'gap-1 min-w-0'
                             ):
+                                # [MOBILE] taille adaptative
                                 t = ui.label(w['title']).classes(
-                                    'text-2xl font-bold')
+                                    'text-xl md:text-2xl font-bold '
+                                    'break-words')
                                 t.style(
                                     f'color: {c_solid} !important;')
                                 if w.get('description'):
                                     d = ui.label(
-                                        w['description']).classes('mt-1')
+                                        w['description']).classes(
+                                            'mt-1 break-words')
                                     d.style(
                                         'color: #334155 !important;')
                         if is_admin:
@@ -1347,8 +1389,9 @@ def wishlist_page(wid: int):
                     'w-full items-center justify-between flex-wrap '
                     'gap-2 mt-2'
                 ):
+                    # [MOBILE] taille adaptative
                     t = ui.label('Mes envies').classes(
-                        'text-2xl font-bold')
+                        'text-xl md:text-2xl font-bold')
                     t.style(f'color: {c_solid} !important;')
 
                     with ui.row().classes(
@@ -1387,12 +1430,12 @@ def wishlist_page(wid: int):
 
                 if not has_items and not has_cats:
                     with ui.column().classes(
-                        'w-full items-center justify-center py-16 gap-3'
+                        'w-full items-center justify-center py-16 gap-3 px-2'
                     ):
                         ui.icon('redeem').classes(
                             'text-6xl text-slate-300')
                         t = ui.label('Aucune envie pour le moment') \
-                            .classes('text-xl font-semibold')
+                            .classes('text-xl font-semibold text-center')
                         t.style('color: #334155 !important;')
                         s = ui.label(
                             "Ajoutez votre première envie ci-dessus."

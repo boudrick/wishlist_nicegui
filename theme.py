@@ -22,6 +22,19 @@ HEAD_HTML = '''
     border-color: #c7d2fe;
     transform: translateY(-2px);
   }
+
+  /* [MOBILE] Boutons compacts : on garde l'icône, on masque le texte. */
+  @media (max-width: 640px) {
+    .hide-label-mobile .q-btn__content > span,
+    .hide-label-mobile .q-btn__content > .q-btn__content-text {
+      display: none !important;
+    }
+    .hide-label-mobile {
+      min-width: 0 !important;
+      padding-left: 6px !important;
+      padding-right: 6px !important;
+    }
+  }
 </style>
 '''
 
@@ -70,6 +83,7 @@ def solid_css(color_value):
     c1, _ = WISHLIST_COLORS.get(color_value, WISHLIST_COLORS['indigo'])
     return c1
 
+
 def light_bg(color_value, opacity='20'):
     """Retourne la couleur solide avec une opacité hex (ex: 20 = 12%)."""
     return f'{solid_css(color_value)}{opacity}'
@@ -90,4 +104,7 @@ def apply_theme():
 
 
 def page_container():
-    return ui.column().classes('w-full max-w-6xl mx-auto px-4 py-8 gap-6')
+    # [MOBILE] padding réduit sur petit écran
+    return ui.column().classes(
+        'w-full max-w-6xl mx-auto px-3 md:px-4 py-4 md:py-8 gap-4 md:gap-6'
+    )
