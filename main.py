@@ -1,4 +1,5 @@
 import json
+import secrets
 from nicegui import ui, app
 from db import (
     init_db, hash_password, verify_password,
@@ -707,8 +708,11 @@ def render_offer_zone(it, refresh_fn, my_res, is_admin=False):
 # ============================================================
 def render_items_grid(items, is_admin, refresh_fn, color,
                       categories, move_item, wid, show_offers, my_res):
+    # Liste sur une seule colonne : chaque cadeau occupe toute la
+    # largeur, et sa hauteur ne dépend que de son propre contenu
+    # (pas de `auto-rows-fr`, qui égalisait toutes les cartes).
     with ui.element('div').classes(
-        'grid grid-cols-1 lg:grid-cols-2 gap-4 w-full auto-rows-fr'
+        'flex flex-col gap-3 md:gap-4 w-full'
     ):
         for idx, it in enumerate(items):
             render_item(it, is_admin, refresh_fn, color, categories,
@@ -1130,9 +1134,138 @@ def add_page():
 
 
 # ============================================================
-# Administration — accès masqué par /admin
-# (aucun lien dans l'interface, page en noindex)
+# Administration — accès masqué par /admin et protégé par mot de
+# passe (aucun lien dans l'interface, page en noindex)
 # ============================================================
+ADMIN_ACCESS_PASSWORD = 'C4deaux'
+ADMIN_UNLOCK_KEY = 'admin_site_unlocked'
+
+
+def _admin_unlocked():
+    """Déverrouillé pour l'onglet courant uniquement : aucun cookie
+    persistant, le mot de passe est redemandé à la prochaine
+    ouverture du site."""
+    try:
+        return bool(app.storage.tab.get(ADMIN_UNLOCK_KEY, False))
+    except RuntimeError:
+        # Pas d'onglet identifié (ex. rendu hors session) : verrouillé.
+        return False
+
+
+def _check_admin_password(value):
+    """Comparaison en temps constant (les .encode() évitent le
+    TypeError de compare_digest sur des caractères non ASCII)."""
+    return secrets.compare_digest(
+        (value or '').encode('utf-8'),
+        ADMIN_ACCESS_PASSWORD.encode('utf-8'))
+
+
+def render_admin_lock_screen(on_unlock):
+    """Écran de saisie du mot de passe d'accès à /admin."""
+    with page_container():
+        with ui.element('div').classes(
+            'soft-card w-full max-w-md mx-auto mt-8 p-6 md:p-8'
+        ):
+            with ui.row().classes('items-center gap-3 mb-2'):
+                ic = ui.icon('lock').classes('text-3xl')
+                ic.style('color: #6366f1 !important;')
+                t = ui.label("Accès à l'administration").classes(
+                    'text-xl font-bold break-words')
+                t.style('color: #1e293b !important;')
+            s = ui.label(
+                "Cette page est protégée. Saisissez le mot de passe "
+                "d'accès pour continuer.").classes(
+                    'text-sm mb-4 break-words')
+            s.style('color: #64748b !important;')
+
+            pwd = ui.input('Mot de passe', password=True,
+                           password_toggle_button=True) \
+                .props('outlined rounded autofocus') \
+                .classes('w-full')
+
+            def submit():
+                if _check_admin_password(pwd.value):
+                    app.storage.tab[ADMIN_UNLOCK_KEY] = True
+                    ui.notify('Accès autorisé.', type='positive')
+                    on_unlock()
+                else:
+                    pwd.value = ''
+                    ui.notify('Mot de passe incorrect.', type='negative')
+
+            # La touche Entrée valide le mot de passe.
+            pwd.on('keydown.enter', submit)
+
+            ui.button('Entrer', icon='login', on_click=submit) \
+                .props('unelevated rounded-full color=primary') \
+                .classes('w-full mt-4 py-3 text-base font-semibold')
+
+            with ui.row().classes('w-full justify-center mt-2'):
+                ui.button('Retour au site', icon='arrow_back',
+                          on_click=lambda: ui.navigate.to('/')) \
+                    .props('flat no-caps rounded-full color=grey-7')
+
+
+@ui.page('/admin')
+def admin_page():
+    apply_theme()
+    # Page réservée : pas d'indexation par les moteurs de recherche.
+    ui.add_head_html('<meta name="robots" content="noindex, nofollow">')
+
+    @ui.refreshable
+    def admin_root():
+        if not _admin_unlocked():
+            render_admin_lock_screen(admin_root.refresh)
+            return
+
+        def lock():
+            app.storage.tab.pop(ADMIN_UNLOCK_KEY, None)
+            ui.notify('Administration verrouillée.', type='info')
+            admin_root.refresh()
+
+        with page_container():
+            with ui.row().classes(
+                'w-full items-center justify-between gap-3 flex-wrap mt-4'
+            ):
+                with ui.column().classes('gap-0'):
+                    t = ui.label('Administration').classes(
+                        'text-2xl md:text-3xl font-extrabold')
+                    t.style('color: #1e293b !important;')
+                    s = ui.label(
+                        'Accès masqué : ne partagez pas cette URL.') \
+                        .classes('text-sm')
+                    s.style('color: #64748b !important;')
+                with ui.row().classes('gap-2 items-center flex-wrap'):
+                    ui.button('Verrouiller', icon='lock',
+                              on_click=lock) \
+                        .props('flat no-caps rounded-full color=grey-7')
+                    ui.button('Retour au site', icon='arrow_back',
+                              on_click=lambda: ui.navigate.to('/')) \
+                        .props('flat no-caps rounded-full color=primary')
+
+            @ui.refreshable
+            def lists_panel():
+                wishlists = get_wishlists()
+                counts = get_item_counts()
+                if not wishlists:
+                    with ui.column().classes(
+                        'w-full items-center justify-center py-16 gap-3'
+                    ):
+                        ui.icon('inventory_2').classes(
+                            'text-6xl text-slate-300')
+                        empty = ui.label('Aucune liste dans la base.') \
+                            .classes('text-xl font-semibold')
+                        empty.style('color: #334155 !important;')
+                    return
+                with ui.column().classes('w-full gap-3'):
+                    for w in wishlists:
+                        render_admin_wishlist_row(
+                            w, counts.get(w['id'], 0), lists_panel.refresh)
+
+            lists_panel()
+
+    admin_root()
+
+
 def _admin_badge(text, bg, fg):
     b = ui.label(text).classes(
         'text-[11px] font-semibold px-2 py-0.5 rounded-full')
@@ -1300,50 +1433,6 @@ def render_admin_wishlist_row(w, item_count, refresh_fn):
                           on_click=lambda:
                               admin_delete_wishlist_dialog(w, refresh_fn)) \
                     .props('flat dense no-caps color=negative')
-
-
-@ui.page('/admin')
-def admin_page():
-    apply_theme()
-    # Page réservée : pas d'indexation par les moteurs de recherche.
-    ui.add_head_html('<meta name="robots" content="noindex, nofollow">')
-
-    with page_container():
-        with ui.row().classes(
-            'w-full items-center justify-between gap-3 flex-wrap mt-4'
-        ):
-            with ui.column().classes('gap-0'):
-                t = ui.label('Administration').classes(
-                    'text-2xl md:text-3xl font-extrabold')
-                t.style('color: #1e293b !important;')
-                s = ui.label(
-                    'Accès masqué : ne partagez pas cette URL.') \
-                    .classes('text-sm')
-                s.style('color: #64748b !important;')
-            ui.button('Retour au site', icon='arrow_back',
-                      on_click=lambda: ui.navigate.to('/')) \
-                .props('flat no-caps rounded-full color=primary')
-
-        @ui.refreshable
-        def lists_panel():
-            wishlists = get_wishlists()
-            counts = get_item_counts()
-            if not wishlists:
-                with ui.column().classes(
-                    'w-full items-center justify-center py-16 gap-3'
-                ):
-                    ui.icon('inventory_2').classes(
-                        'text-6xl text-slate-300')
-                    empty = ui.label('Aucune liste dans la base.') \
-                        .classes('text-xl font-semibold')
-                    empty.style('color: #334155 !important;')
-                return
-            with ui.column().classes('w-full gap-3'):
-                for w in wishlists:
-                    render_admin_wishlist_row(
-                        w, counts.get(w['id'], 0), lists_panel.refresh)
-
-        lists_panel()
 
 
 # ============================================================

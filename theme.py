@@ -68,9 +68,11 @@ HEAD_HTML = '''
     overflow: hidden;
     background-color: rgba(255, 255, 255, .55);
   }
+  /* [MOBILE] Photo du cadeau volontairement basse : elle ne doit pas
+     monopoliser l'écran, le contenu du cadeau prime. */
   .wl-item-media.has-image {
-    aspect-ratio: 16 / 10;
-    max-height: 240px;
+    aspect-ratio: 2 / 1;
+    max-height: 140px;
   }
   .wl-item-media.is-emoji {
     display: flex;
@@ -86,7 +88,7 @@ HEAD_HTML = '''
     display: block;
     width: 100%;
     height: 100%;
-    max-height: 240px;
+    max-height: 140px;
     object-fit: cover;
   }
 
@@ -145,26 +147,26 @@ HEAD_HTML = '''
     .wl-item-body {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto auto;
       grid-template-areas:
         "title"
         "desc";
       align-items: start;
     }
     .wl-item-body.has-media {
-      grid-template-columns: 112px minmax(0, 1fr);
+      grid-template-columns: 160px minmax(0, 1fr);
       grid-template-areas:
         "media title"
         "media desc";
     }
     .wl-item-body.has-links {
-      grid-template-columns: minmax(0, 1fr) 190px;
+      grid-template-columns: minmax(0, 1fr) 200px;
       grid-template-areas:
         "title links"
         "desc links";
     }
     .wl-item-body.has-media.has-links {
-      grid-template-columns: 112px minmax(0, 1fr) 190px;
+      grid-template-columns: 160px minmax(0, 1fr) 200px;
       grid-template-areas:
         "media title links"
         "media desc links";
@@ -174,13 +176,22 @@ HEAD_HTML = '''
     .wl-item-desc { grid-area: desc; }
     .wl-item-links { grid-area: links; }
 
-    .wl-item-media {
+    /* Vignette de taille fixe : la hauteur de la carte ne dépend que
+       du contenu du cadeau (titre, description, liens).
+       `.has-image` est répété pour passer devant la règle mobile
+       (même spécificité, déclarée après). */
+    .wl-item-media,
+    .wl-item-media.has-image {
       grid-area: media;
-      height: 100%;
-      /* La photo occupe toute la hauteur du contenu du cadeau. */
-      min-height: 150px;
+      width: 160px;
+      height: auto;
+      min-height: 0;
       max-height: none;
-      aspect-ratio: auto;
+      aspect-ratio: 4 / 3;
+      align-self: start;
+    }
+    .wl-item-media.is-emoji {
+      min-height: 0;
     }
     .wl-item-media img {
       height: 100%;
