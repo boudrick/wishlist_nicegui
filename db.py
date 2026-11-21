@@ -4,7 +4,7 @@ import secrets
 from pathlib import Path
 from contextlib import contextmanager, nullcontext
 
-DB_PATH = Path('wishlist.db')
+DB_PATH = Path('data/wishlist.db')
 
 
 def hash_password(password, salt=None):
