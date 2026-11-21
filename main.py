@@ -932,10 +932,6 @@ def home():
                               on_click=lambda: ui.navigate.to('/add')) \
                         .props('unelevated rounded-full color=primary '
                                'no-caps')
-                    ui.button('Voir un exemple', icon='auto_awesome',
-                              on_click=load_demo) \
-                        .props('outline rounded-full color=primary '
-                               'no-caps')
             return
 
         counts = get_item_counts()
