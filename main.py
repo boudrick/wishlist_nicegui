@@ -901,12 +901,6 @@ def home():
     add_reset_on_leave_js()
     wishlists = get_wishlists()
 
-    def load_demo():
-        seed_demo()
-        ui.notify('Exemples chargés ! Mot de passe : "demo"',
-                  type='positive', timeout=8000)
-        ui.navigate.to('/')
-
     with page_container():
         # [MOBILE] titre + boutons adaptatifs
         with ui.row().classes(
@@ -917,10 +911,6 @@ def home():
             sec.style('color: #1e293b !important;')
 
             with ui.row().classes('gap-3 items-center flex-wrap'):
-                if not has_demo_data():
-                    b1 = ui.button('Exemples', icon='auto_awesome',
-                                   on_click=load_demo)
-                    b1.props('flat no-caps rounded-full color=primary')
                 b2 = ui.button('Créer ma liste', icon='add',
                                on_click=lambda: ui.navigate.to('/add'))
                 b2.props('unelevated no-caps rounded-full color=primary')
@@ -941,10 +931,6 @@ def home():
                     ui.button('Créer ma première liste', icon='add',
                               on_click=lambda: ui.navigate.to('/add')) \
                         .props('unelevated rounded-full color=primary '
-                               'no-caps')
-                    ui.button('Voir un exemple', icon='auto_awesome',
-                              on_click=load_demo) \
-                        .props('outline rounded-full color=primary '
                                'no-caps')
             return
 
