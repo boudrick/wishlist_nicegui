@@ -16,7 +16,6 @@ from theme import (
     DEFAULT_GRADIENT, DEFAULT_SOLID, WISHLIST_COLORS,
     solid_css, light_bg,
 )
-from demo import seed_demo, has_demo_data
 
 init_db()
 
