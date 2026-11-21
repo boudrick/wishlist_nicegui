@@ -1,11 +1,12 @@
 services:
-  web:
+  liste-de-cadeau:
     build:
-      context: https://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@github.com/boudrick/wishlist_nicegui/tree/online
+      context: "https://github.com/boudrick/wishlist_nicegui.git#online"
       dockerfile: Dockerfile
     container_name: liste-de-cadeau
     ports:
-      - "8080:8080"
+      - 8080:8080
     volumes:
-      - nicegui_data:/app/data
+      - /mnt/../:/app
     restart: unless-stopped
+networks: {}
