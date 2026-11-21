@@ -5,6 +5,8 @@ from pathlib import Path
 from contextlib import contextmanager, nullcontext
 
 DB_PATH = Path('data/wishlist.db')
+print(Path(__file__))
+print("test")
 
 
 def hash_password(password, salt=None):
