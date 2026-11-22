@@ -6,6 +6,7 @@ from db import (
     init_db, hash_password, verify_password,
     get_wishlists, get_wishlist, create_wishlist, update_wishlist,
     update_wishlist_link, delete_wishlist, set_wishlist_password,
+    rename_wishlist, set_wishlist_families,
     get_categories, create_category, update_category, delete_category,
     swap_category_position,
     get_items_with_links, create_item, update_item, delete_item,
@@ -1807,6 +1808,84 @@ async def admin_edit_link_dialog(w, refresh_fn):
         ui.notify('Lien mis à jour.', type='positive')
 
 
+async def admin_rename_wishlist_dialog(w, refresh_fn):
+    with ui.dialog() as dialog, ui.card().classes(
+        'w-[520px] max-w-[calc(100vw-1rem)] p-4 md:p-6 rounded-2xl'
+    ):
+        t = ui.label('Renommer la liste').classes('text-lg font-bold')
+        t.style('color: #1e293b !important;')
+        sub = ui.label(w['title']).classes('text-sm mt-1 mb-4 break-words')
+        sub.style('color: #64748b !important;')
+
+        name_input = ui.input('Nouveau nom', value=w['title']) \
+            .props('outlined rounded autofocus').classes('w-full')
+
+        def save():
+            value = (name_input.value or '').strip()
+            if not value:
+                ui.notify('Nom requis', type='negative')
+                return
+            rename_wishlist(w['id'], value)
+            dialog.submit(True)
+
+        # La touche Entrée valide le nouveau nom.
+        name_input.on('keydown.enter', save)
+
+        with ui.row().classes('w-full justify-end gap-2 mt-4'):
+            ui.button('Annuler',
+                      on_click=lambda: dialog.submit(None)) \
+                .props('flat rounded-lg color=grey-7')
+            ui.button('Renommer', icon='check', on_click=save) \
+                .props('unelevated rounded-lg color=primary')
+
+    if await dialog:
+        refresh_fn()
+        ui.notify('Liste renommée.', type='positive')
+
+
+async def admin_wishlist_families_dialog(w, refresh_fn):
+    current = _wishlist_families(w)
+    known = sorted(
+        set(get_all_families()) | set(current),
+        key=str.casefold)
+
+    with ui.dialog() as dialog, ui.card().classes(
+        'w-[560px] max-w-[calc(100vw-1rem)] p-4 md:p-6 rounded-2xl '
+        'max-h-[90vh] overflow-y-auto'
+    ):
+        t = ui.label('Familles de la liste').classes('text-lg font-bold')
+        t.style('color: #1e293b !important;')
+        sub = ui.label(w['title']).classes('text-sm mt-1 mb-3 break-words')
+        sub.style('color: #64748b !important;')
+        hint = ui.label(
+            'Sélectionnez les familles qui peuvent voir cette liste. '
+            'Sans famille, elle n’apparaît que dans le filtre « Toutes ». '
+            'Tapez un nom puis Entrée pour créer une famille.'
+        ).classes('text-xs mb-3 break-words')
+        hint.style('color: #64748b !important;')
+
+        family_select = ui.select(
+            known, multiple=True, value=current,
+            label='Familles', new_value_mode='add-unique',
+        ).props('outlined rounded use-chips clearable') \
+            .classes('w-full')
+
+        def save():
+            set_wishlist_families(w['id'], family_select.value)
+            dialog.submit(True)
+
+        with ui.row().classes('w-full justify-end gap-2 mt-4'):
+            ui.button('Annuler',
+                      on_click=lambda: dialog.submit(None)) \
+                .props('flat rounded-lg color=grey-7')
+            ui.button('Enregistrer', icon='check', on_click=save) \
+                .props('unelevated rounded-lg color=primary')
+
+    if await dialog:
+        refresh_fn()
+        ui.notify('Familles mises à jour.', type='positive')
+
+
 async def admin_reset_password_dialog(w, refresh_fn):
     with ui.dialog() as dialog, ui.card().classes(
         'w-96 max-w-[calc(100vw-2rem)] p-4 md:p-6 rounded-2xl'
@@ -1904,6 +1983,14 @@ def render_admin_wishlist_row(w, item_count, refresh_fn):
                 ui.button('Ouvrir', icon='open_in_new',
                           on_click=lambda: _open_wishlist(
                               w['id'], w.get('url'), is_internal)) \
+                    .props('flat dense no-caps color=primary')
+                ui.button('Renommer', icon='edit',
+                          on_click=lambda:
+                              admin_rename_wishlist_dialog(w, refresh_fn)) \
+                    .props('flat dense no-caps color=primary')
+                ui.button('Familles', icon='family_restroom',
+                          on_click=lambda:
+                              admin_wishlist_families_dialog(w, refresh_fn)) \
                     .props('flat dense no-caps color=primary')
                 ui.button('Lien', icon='link',
                           on_click=lambda:
