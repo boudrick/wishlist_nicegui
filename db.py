@@ -254,6 +254,22 @@ def update_wishlist(wid, title, owner, description, url, color,
              emoji or None, serialize_families(families), wid))
 
 
+def rename_wishlist(wid, title):
+    """Renomme une liste depuis la page d'administration."""
+    with connection() as conn:
+        conn.execute(
+            'UPDATE wishlists SET title=?, owner=? WHERE id=?',
+            (title, title, wid))
+
+
+def set_wishlist_families(wid, families):
+    """Modifie les familles autorisées d'une liste (admin)."""
+    with connection() as conn:
+        conn.execute(
+            'UPDATE wishlists SET families=? WHERE id=?',
+            (serialize_families(families), wid))
+
+
 def update_wishlist_link(wid, wtype, url):
     """Met à jour le type de liste et l'URL de redirection (admin)."""
     with connection() as conn:
