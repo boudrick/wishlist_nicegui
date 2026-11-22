@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import hashlib
 import secrets
@@ -51,6 +52,7 @@ def init_db():
             password TEXT,
             color TEXT,
             emoji TEXT,
+            families TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         c.execute('''CREATE TABLE IF NOT EXISTS items (
@@ -114,6 +116,8 @@ def init_db():
             c.execute('ALTER TABLE wishlists ADD COLUMN color TEXT')
         if not has_column('wishlists', 'emoji'):
             c.execute('ALTER TABLE wishlists ADD COLUMN emoji TEXT')
+        if not has_column('wishlists', 'families'):
+            c.execute('ALTER TABLE wishlists ADD COLUMN families TEXT')
         if not has_column('items', 'image_url'):
             c.execute('ALTER TABLE items ADD COLUMN image_url TEXT')
         if not has_column('items', 'category_id'):
@@ -152,6 +156,59 @@ def init_db():
 
 
 # ============================================================
+# Familles (visibilité des listes)
+# ============================================================
+def parse_families(value):
+    """Normalise une valeur stockée en liste de noms de familles.
+
+    Accepte une liste Python, une chaîne JSON (format utilisé par
+    l'application) ou, pour d'anciennes données, une liste séparée par
+    des virgules. Les doublons (insensibles à la casse) sont retirés.
+    """
+    if not value:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        items = list(value)
+    else:
+        try:
+            data = json.loads(value)
+        except (TypeError, ValueError):
+            data = str(value).split(',')
+        items = data if isinstance(data, list) else [data]
+
+    out = []
+    seen = set()
+    for item in items:
+        name = str(item or '').strip()
+        key = name.casefold()
+        if name and key not in seen:
+            seen.add(key)
+            out.append(name)
+    return out
+
+
+def serialize_families(value):
+    """Sérialise une sélection de familles pour la colonne `families`."""
+    families = parse_families(value)
+    if not families:
+        return None
+    return json.dumps(families, ensure_ascii=False)
+
+
+def get_all_families():
+    """Liste triée des familles déjà utilisées par au moins une liste."""
+    with connection() as conn:
+        rows = conn.execute(
+            'SELECT families FROM wishlists '
+            'WHERE families IS NOT NULL AND families != ""').fetchall()
+    names = {}
+    for row in rows:
+        for name in parse_families(row['families']):
+            names.setdefault(name.casefold(), name)
+    return sorted(names.values(), key=str.casefold)
+
+
+# ============================================================
 # Wishlists
 # ============================================================
 def get_wishlists():
@@ -173,26 +230,28 @@ def _ctx(_conn):
 
 
 def create_wishlist(title, owner, wtype, url, description, password_hash,
-                    color, emoji=None, _conn=None):
+                    color, emoji=None, families=None, _conn=None):
     with _ctx(_conn) as conn:
         cur = conn.execute(
             'INSERT INTO wishlists '
-            '(title, owner, type, url, description, password, color, emoji) '
-            'VALUES (?,?,?,?,?,?,?,?)',
+            '(title, owner, type, url, description, password, color, emoji, '
+            'families) '
+            'VALUES (?,?,?,?,?,?,?,?,?)',
             (title, owner, wtype, url, description, password_hash,
-             color, emoji or None))
+             color, emoji or None, serialize_families(families)))
         return cur.lastrowid
 
 
 def update_wishlist(wid, title, owner, description, url, color,
-                    emoji=None):
+                    emoji=None, families=None):
     with connection() as conn:
         conn.execute(
             'UPDATE wishlists '
-            'SET title=?, owner=?, description=?, url=?, color=?, emoji=? '
+            'SET title=?, owner=?, description=?, url=?, color=?, emoji=?, '
+            'families=? '
             'WHERE id=?',
             (title, owner, description, url, color,
-             emoji or None, wid))
+             emoji or None, serialize_families(families), wid))
 
 
 def update_wishlist_link(wid, wtype, url):
