@@ -66,30 +66,31 @@ HEAD_HTML = '''
     width: 100%;
     border-radius: 12px;
     overflow: hidden;
-    background-color: rgba(255, 255, 255, .55);
-  }
-  /* [MOBILE] Photo du cadeau volontairement basse : elle ne doit pas
-     monopoliser l'écran, le contenu du cadeau prime. */
-  .wl-item-media.has-image {
-    aspect-ratio: 2 / 1;
-    max-height: 140px;
-  }
-  .wl-item-media.is-emoji {
+    background-color: rgba(255, 255, 255, .75);
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+  /* [MOBILE] Photo volontairement compacte, mais jamais recadrée :
+     l'image entière doit rester visible. */
+  .wl-item-media.has-image {
+    aspect-ratio: 4 / 3;
+    max-height: 220px;
+  }
+  .wl-item-media.is-emoji {
     min-height: 72px;
   }
   .wl-item-media .q-img {
     width: 100%;
     height: 100%;
   }
-  .wl-item-media img {
+  .wl-item-media img,
+  .wl-item-media .q-img__image {
     display: block;
     width: 100%;
     height: 100%;
-    max-height: 140px;
-    object-fit: cover;
+    max-height: 220px;
+    object-fit: contain !important;
   }
 
   /* Nom du site + prix : jamais tronqués (le nom peut passer à la
@@ -124,11 +125,30 @@ HEAD_HTML = '''
 
   /* Pied d'actions des longues fenêtres de dialogue : reste visible
      même quand le formulaire défile. */
+  .wl-dialog-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0;
+    max-height: 85vh;
+    max-height: 85dvh;
+    overflow: hidden;
+  }
+  .wl-dialog-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
   .wl-dialog-footer {
-    position: sticky;
-    bottom: 0;
+    flex: 0 0 auto;
+    position: relative;
     z-index: 2;
     background-color: #ffffff;
+    border-top: 1px solid #e2e8f0;
+    box-shadow: 0 -4px 12px -8px rgba(15, 23, 42, .15);
   }
 
   /* Statut des offres : bandeau compact pour laisser la part belle
@@ -154,7 +174,7 @@ HEAD_HTML = '''
       align-items: start;
     }
     .wl-item-body.has-media {
-      grid-template-columns: 160px minmax(0, 1fr);
+      grid-template-columns: 180px minmax(0, 1fr);
       grid-template-areas:
         "media title"
         "media desc";
@@ -166,7 +186,7 @@ HEAD_HTML = '''
         "desc links";
     }
     .wl-item-body.has-media.has-links {
-      grid-template-columns: 160px minmax(0, 1fr) 200px;
+      grid-template-columns: 180px minmax(0, 1fr) 200px;
       grid-template-areas:
         "media title links"
         "media desc links";
@@ -183,7 +203,7 @@ HEAD_HTML = '''
     .wl-item-media,
     .wl-item-media.has-image {
       grid-area: media;
-      width: 160px;
+      width: 180px;
       height: auto;
       min-height: 0;
       max-height: none;
@@ -193,7 +213,8 @@ HEAD_HTML = '''
     .wl-item-media.is-emoji {
       min-height: 0;
     }
-    .wl-item-media img {
+    .wl-item-media img,
+    .wl-item-media .q-img__image {
       height: 100%;
       max-height: none;
     }

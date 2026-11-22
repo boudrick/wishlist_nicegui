@@ -1,5 +1,6 @@
 import json
 import secrets
+import unicodedata
 from nicegui import ui, app
 from db import (
     init_db, hash_password, verify_password,
@@ -10,6 +11,7 @@ from db import (
     get_items_with_links, create_item, update_item, delete_item,
     swap_item_position, get_item_counts,
     add_reservation, delete_reservation, delete_reservations_for_item,
+    parse_families, get_all_families,
 )
 from theme import (
     apply_theme, page_container, apply_gradient,
@@ -30,8 +32,9 @@ def render_visual(value, emoji_class='text-3xl', img_class='w-12 h-12'):
     v = str(value).strip()
     if v.startswith('http://') or v.startswith('https://'):
         # `lazy` : l'image ne se charge que quand elle est visible.
+        # `contain` : l'image entière reste visible (aucun recadrage).
         ui.image(v).classes(f'{img_class} rounded-lg flex-shrink-0')\
-            .props('lazy fit=cover')
+            .props('lazy fit=contain')
     else:
         ui.label(v).classes(f'{emoji_class} leading-none')
 
@@ -63,6 +66,60 @@ def _remove_my_reservation(res_id):
     lst = [r for r in app.storage.user.get('my_reservations', [])
            if r != res_id]
     app.storage.user['my_reservations'] = lst
+
+
+# ============================================================
+# Familles / filtre d'accueil
+# ============================================================
+FAMILY_FILTER_KEY = 'home_family_filter'
+
+
+def _wishlist_families(w):
+    """Familles autorisées à voir une liste ([] = tout le monde)."""
+    return parse_families((w or {}).get('families'))
+
+
+def _family_matches(w, family):
+    """Une liste sans famille est visible par toutes les familles."""
+    if not family:
+        return True
+    families = _wishlist_families(w)
+    if not families:
+        return True
+    wanted = family.casefold()
+    return any(f.casefold() == wanted for f in families)
+
+
+def _read_family_filter():
+    try:
+        return app.storage.user.get(FAMILY_FILTER_KEY) or ''
+    except RuntimeError:
+        return ''
+
+
+def _write_family_filter(value):
+    try:
+        if value:
+            app.storage.user[FAMILY_FILTER_KEY] = value
+        else:
+            app.storage.user.pop(FAMILY_FILTER_KEY, None)
+    except RuntimeError:
+        pass
+
+
+def _norm_search(value):
+    """Minuscules sans accents, pour une recherche tolérante."""
+    text = unicodedata.normalize('NFKD', str(value or '').casefold())
+    return ''.join(c for c in text if not unicodedata.combining(c))
+
+
+def _wishlist_matches_search(w, query):
+    if not query:
+        return True
+    haystack = ' '.join(str(w.get(k) or '') for k in
+                        ('title', 'owner', 'description'))
+    haystack += ' ' + ' '.join(_wishlist_families(w))
+    return query in _norm_search(haystack)
 
 
 # ============================================================
@@ -480,18 +537,21 @@ def build_item_fields(item=None, categories=None, default_category_id=None):
 # ============================================================
 async def open_add_item_dialog(wid, categories, refresh_fn,
                                default_category_id=None):
-    # [MOBILE] largeur plafonnée + padding adaptatif
+    # [MOBILE] en-tête + champs défilent, pied d'actions toujours visible
     with ui.dialog() as dialog, ui.card().classes(
-        'w-[1150px] max-w-[calc(100vw-1rem)] p-4 md:p-6 rounded-2xl '
-        'max-h-[90vh] overflow-y-auto'
+        'wl-dialog-card w-[1150px] max-w-[calc(100vw-1rem)] '
+        'p-0 rounded-2xl'
     ):
-        lbl = ui.label('Ajouter un cadeau').classes(
-            'text-lg font-bold mb-4')
-        lbl.style('color: #1e293b !important;')
+        with ui.column().classes(
+            'wl-dialog-body w-full p-4 md:p-6 gap-0'
+        ):
+            lbl = ui.label('Ajouter un cadeau').classes(
+                'text-lg font-bold mb-4')
+            lbl.style('color: #1e293b !important;')
 
-        get_values = build_item_fields(
-            categories=categories,
-            default_category_id=default_category_id)
+            get_values = build_item_fields(
+                categories=categories,
+                default_category_id=default_category_id)
 
         def submit():
             v = get_values()
@@ -504,7 +564,8 @@ async def open_add_item_dialog(wid, categories, refresh_fn,
             dialog.submit(True)
 
         with ui.row().classes(
-            'w-full justify-between items-center mt-4 flex-wrap gap-2'
+            'wl-dialog-footer w-full justify-between items-center '
+            'p-3 md:px-6 flex-wrap gap-2'
         ):
             ui.button('Annuler',
                       on_click=lambda: dialog.submit(None)) \
@@ -519,17 +580,20 @@ async def open_add_item_dialog(wid, categories, refresh_fn,
 
 
 async def open_edit_item_dialog(item, categories, refresh_fn):
-    # [MOBILE] largeur plafonnée + padding adaptatif
+    # [MOBILE] en-tête + champs défilent, pied d'actions toujours visible
     with ui.dialog() as dialog, ui.card().classes(
-        'w-[1150px] max-w-[calc(100vw-1rem)] p-4 md:p-6 rounded-2xl '
-        'max-h-[90vh] overflow-y-auto'
+        'wl-dialog-card w-[1150px] max-w-[calc(100vw-1rem)] '
+        'p-0 rounded-2xl'
     ):
-        lbl = ui.label('Modifier le cadeau').classes(
-            'text-lg font-bold mb-4')
-        lbl.style('color: #1e293b !important;')
+        with ui.column().classes(
+            'wl-dialog-body w-full p-4 md:p-6 gap-0'
+        ):
+            lbl = ui.label('Modifier le cadeau').classes(
+                'text-lg font-bold mb-4')
+            lbl.style('color: #1e293b !important;')
 
-        get_values = build_item_fields(
-            item=item, categories=categories)
+            get_values = build_item_fields(
+                item=item, categories=categories)
 
         def save():
             v = get_values()
@@ -542,7 +606,8 @@ async def open_edit_item_dialog(item, categories, refresh_fn):
             dialog.submit(True)
 
         with ui.row().classes(
-            'w-full justify-between items-center mt-4 flex-wrap gap-2'
+            'wl-dialog-footer w-full justify-between items-center '
+            'p-3 md:px-6 flex-wrap gap-2'
         ):
             ui.button('Annuler',
                       on_click=lambda: dialog.submit(None)) \
@@ -792,7 +857,7 @@ def render_item(it, is_admin, refresh_fn, color, categories,
                     with ui.element('div').classes(
                         'wl-item-media has-image'
                     ):
-                        ui.image(visual).props('lazy fit=cover') \
+                        ui.image(visual).props('lazy fit=contain') \
                             .classes('w-full h-full')
                 else:
                     with ui.element('div').classes(
@@ -892,6 +957,260 @@ def render_category_header_public(cat, color_solid):
 
 
 # ============================================================
+# Déverrouillage / édition d'une liste
+# (partagé entre l'accueil et la page détail)
+# ============================================================
+async def unlock_wishlist_admin(wid):
+    """Autorise l'édition d'une liste après mot de passe.
+
+    Un accès admin global (page /admin) ou un déverrouillage déjà
+    effectué pour cette liste dispense de ressaisir le mot de passe.
+    Retourne la liste à jour, ou None si l'accès est refusé.
+    """
+    w = get_wishlist(wid)
+    if not w:
+        return None
+    try:
+        already = app.storage.user.get(f'admin_wl_{wid}', False)
+    except RuntimeError:
+        already = False
+    if already or _admin_unlocked():
+        return w
+
+    if w.get('password'):
+        pwd = await prompt_password()
+        if not pwd:
+            return None
+        if not verify_password(pwd, w['password']):
+            ui.notify('Mot de passe incorrect.', type='negative')
+            return None
+    else:
+        pwd = await prompt_password(
+            "Créer le mot de passe d'édition",
+            "Cette liste n'a pas encore de mot de passe. "
+            "Choisissez-en un : il sera demandé pour la modifier.")
+        if not pwd:
+            return None
+        set_wishlist_password(wid, hash_password(pwd))
+        w = get_wishlist(wid) or w
+        ui.notify('Mot de passe défini, mode édition activé.',
+                  type='positive')
+
+    app.storage.user[f'admin_wl_{wid}'] = True
+    return w
+
+
+async def open_edit_wishlist_dialog(w):
+    """Paramètres d'une liste : titre, description, type, visuel,
+    couleur, familles autorisées et mot de passe.
+
+    Retourne 'saved', 'deleted' ou None (annulé). L'appelant décide
+    de la navigation / du rafraîchissement.
+    """
+    wid = w['id']
+    existing_families = _wishlist_families(w)
+    known_families = sorted(
+        set(get_all_families()) | set(existing_families),
+        key=str.casefold)
+
+    with ui.dialog() as dialog, ui.card().classes(
+        'wl-dialog-card w-[620px] max-w-[calc(100vw-1rem)] '
+        'p-0 rounded-2xl'
+    ):
+        with ui.column().classes(
+            'wl-dialog-body w-full p-4 md:p-6 gap-0'
+        ):
+            t0 = ui.label('Modifier la liste').classes(
+                'text-lg font-bold mb-4')
+            t0.style('color: #1e293b !important;')
+
+            t = ui.input('Titre', value=w['title']) \
+                .props('outlined rounded').classes('w-full')
+            d = ui.textarea('Description',
+                            value=w.get('description') or '') \
+                .props('outlined rounded autogrow').classes('w-full mt-3')
+
+            lb_type = ui.label('Type de liste').classes(
+                'text-sm font-semibold mt-4 mb-1')
+            lb_type.style('color: #334155 !important;')
+            kind = ui.radio(
+                {'internal': 'Créer sur ce site',
+                 'external': 'Lien vers un autre site'},
+                value=w.get('type') or 'internal',
+            ).props('inline')
+
+            u = ui.input('URL (si externe)',
+                         value=w.get('url') or '',
+                         placeholder='https://...') \
+                .props('outlined rounded').classes('w-full mt-2')
+            u.set_visibility((w.get('type') or 'internal') == 'external')
+            kind.on_value_change(
+                lambda e: u.set_visibility(e.value == 'external'))
+
+            lb_e = ui.label('Émoji ou URL d\'image').classes(
+                'text-sm font-semibold mt-4 mb-2')
+            lb_e.style('color: #334155 !important;')
+            visual_in = ui.input(placeholder='🎁 ou https://...',
+                                 value=w.get('emoji') or '') \
+                .props('outlined rounded').classes('w-full')
+
+            lb = ui.label('Couleur').classes(
+                'text-sm font-semibold mt-4 mb-2')
+            lb.style('color: #334155 !important;')
+            _, render_picker, get_color = color_picker(
+                w.get('color') or 'indigo')
+            render_picker(size='w-8 h-8')
+
+            # --- Familles autorisées ---
+            ui.separator().classes('my-4')
+            with ui.row().classes('items-center gap-2'):
+                ui.icon('family_restroom').classes('text-indigo-500')
+                lb_f = ui.label('Familles autorisées').classes(
+                    'text-sm font-semibold')
+                lb_f.style('color: #334155 !important;')
+            hint_f = ui.label(
+                'Seules ces familles verront la liste sur l’accueil. '
+                'Aucune sélection = visible par tout le monde. '
+                'Tapez un nom puis Entrée pour créer une nouvelle famille.'
+            ).classes('text-xs mb-3 break-words')
+            hint_f.style('color: #64748b !important;')
+            family_select = ui.select(
+                known_families, multiple=True, value=existing_families,
+                label='Familles', new_value_mode='add-unique',
+            ).props('outlined rounded use-chips clearable') \
+                .classes('w-full')
+
+            # --- Mot de passe d'édition (comme à la création) ---
+            ui.separator().classes('my-4')
+            lb_pw = ui.label("Mot de passe d'édition").classes(
+                'text-sm font-semibold mb-2')
+            lb_pw.style('color: #334155 !important;')
+            if w.get('password'):
+                st_pw = ui.label(
+                    'Un mot de passe est défini. Laissez les champs '
+                    'vides pour le conserver.')
+            else:
+                st_pw = ui.label(
+                    "Aucun mot de passe défini : la personne pourra en "
+                    "choisir un en passant en mode édition.")
+            st_pw.classes('text-xs mb-3 break-words')
+            st_pw.style('color: #64748b !important;')
+
+            new_pwd = ui.input('Nouveau mot de passe', password=True,
+                               password_toggle_button=True) \
+                .props('outlined rounded').classes('w-full')
+            new_pwd2 = ui.input('Confirmer le nouveau mot de passe',
+                                password=True,
+                                password_toggle_button=True) \
+                .props('outlined rounded').classes('w-full mt-3')
+            pw_hint = ui.label('').classes('text-xs h-4 mt-1')
+
+            def check_pw_match(e=None):
+                v1 = new_pwd.value or ''
+                v2 = new_pwd2.value or ''
+                if not v2:
+                    pw_hint.text = ''
+                    pw_hint.style('color: transparent;')
+                elif v1 == v2:
+                    pw_hint.text = '✓ Les mots de passe correspondent'
+                    pw_hint.style('color: #10b981 !important;')
+                else:
+                    pw_hint.text = '✗ Les mots de passe ne correspondent pas'
+                    pw_hint.style('color: #ef4444 !important;')
+
+            new_pwd.on_value_change(check_pw_match)
+            new_pwd2.on_value_change(check_pw_match)
+
+            async def delete_wishlist_dialog():
+                with ui.dialog() as confirm, ui.card().classes(
+                    'w-96 max-w-[calc(100vw-2rem)] p-4 md:p-6 rounded-2xl'
+                ):
+                    t1 = ui.label('Supprimer cette liste ?').classes(
+                        'text-lg font-bold')
+                    t1.style('color: #1e293b !important;')
+                    s1 = ui.label('Cette action est irréversible.') \
+                        .classes('text-sm mb-4')
+                    s1.style('color: #64748b !important;')
+                    with ui.row().classes('w-full justify-end gap-2'):
+                        ui.button('Annuler',
+                                  on_click=lambda:
+                                      confirm.submit(False)) \
+                            .props('flat rounded-lg color=grey-7')
+                        ui.button('Supprimer',
+                                  on_click=lambda:
+                                      confirm.submit(True)) \
+                            .props('unelevated rounded-lg color=negative')
+                if await confirm:
+                    delete_wishlist(wid)
+                    app.storage.user.pop(f'admin_wl_{wid}', None)
+                    dialog.submit('deleted')
+
+            def save():
+                title_value = (t.value or '').strip()
+                if not title_value:
+                    ui.notify('Titre requis', type='negative')
+                    return
+                kind_value = kind.value or 'internal'
+                url_value = (u.value or '').strip()
+                if kind_value == 'external':
+                    if not url_value:
+                        ui.notify(
+                            'URL requise pour une redirection externe',
+                            type='negative')
+                        return
+                    if not (url_value.startswith('http://')
+                            or url_value.startswith('https://')):
+                        ui.notify(
+                            'URL invalide (http:// ou https:// attendu)',
+                            type='negative')
+                        return
+                else:
+                    url_value = None
+
+                p1 = new_pwd.value or ''
+                p2 = new_pwd2.value or ''
+                if p1 or p2:
+                    if not p1:
+                        ui.notify('Nouveau mot de passe requis',
+                                  type='negative')
+                        return
+                    if p1 != p2:
+                        ui.notify('Les mots de passe ne correspondent pas',
+                                  type='negative')
+                        return
+
+                update_wishlist(
+                    wid, title_value, title_value,
+                    (d.value or '').strip() or None,
+                    url_value,
+                    get_color(),
+                    (visual_in.value or '').strip() or None,
+                    families=family_select.value)
+                update_wishlist_link(wid, kind_value, url_value)
+                if p1:
+                    set_wishlist_password(wid, hash_password(p1))
+                dialog.submit('saved')
+
+        # Pied toujours visible : le corps du formulaire défile.
+        with ui.row().classes(
+            'wl-dialog-footer w-full justify-between items-center '
+            'p-3 md:px-6 flex-wrap gap-2'
+        ):
+            ui.button('Supprimer', icon='delete',
+                      on_click=delete_wishlist_dialog) \
+                .props('flat rounded-lg color=negative')
+            with ui.row().classes('gap-2 flex-wrap'):
+                ui.button('Annuler',
+                          on_click=lambda: dialog.submit(None)) \
+                    .props('flat rounded-lg color=grey-7')
+                ui.button('Enregistrer', icon='check', on_click=save) \
+                    .props('unelevated rounded-lg color=primary')
+
+    result = await dialog
+    return result if result in ('saved', 'deleted') else None
+
+
+# ============================================================
 # Page d'accueil
 # ============================================================
 @ui.page('/')
@@ -899,6 +1218,114 @@ def home():
     apply_theme()
     add_reset_on_leave_js()
     wishlists = get_wishlists()
+
+    selected_family = {'value': _read_family_filter()}
+    known_families = get_all_families()
+    if (selected_family['value']
+            and selected_family['value'] not in known_families):
+        # La famille mémorisée n'existe plus (liste modifiée/supprimée).
+        selected_family['value'] = ''
+        _write_family_filter('')
+
+    search_input = None
+
+    def select_family(value):
+        selected_family['value'] = value
+        _write_family_filter(value)
+        family_bar.refresh()
+        lists_panel.refresh()
+
+    def reset_filters():
+        selected_family['value'] = ''
+        _write_family_filter('')
+        if search_input is not None:
+            search_input.value = ''
+        family_bar.refresh()
+        lists_panel.refresh()
+
+    async def edit_list(w):
+        # Le crayon est visible par tous, mais l'édition reste protégée
+        # par le mot de passe de la liste (ou l'accès admin global).
+        unlocked = await unlock_wishlist_admin(w['id'])
+        if not unlocked:
+            return
+        result = await open_edit_wishlist_dialog(unlocked)
+        if result:
+            family_bar.refresh()
+            lists_panel.refresh()
+            if result == 'saved':
+                ui.notify('Liste modifiée.', type='positive')
+            elif result == 'deleted':
+                ui.notify('Liste supprimée.', type='info')
+
+    @ui.refreshable
+    def family_bar():
+        families_now = get_all_families()
+        if (selected_family['value']
+                and selected_family['value'] not in families_now):
+            selected_family['value'] = ''
+            _write_family_filter('')
+
+        if not families_now:
+            # Aucune famille définie : le filtre n'aurait que « Toutes ».
+            return
+
+        with ui.row().classes('w-full items-center gap-2 flex-wrap'):
+            ic = ui.icon('family_restroom').classes('text-indigo-500')
+            ic.tooltip('Filtrer les listes par famille')
+            lbl = ui.label('Familles :').classes('text-sm font-semibold')
+            lbl.style('color: #334155 !important;')
+
+            options = [('', 'Toutes')] + [(f, f) for f in families_now]
+            for value, label in options:
+                active = selected_family['value'] == value
+                b = ui.button(
+                    label,
+                    on_click=lambda v=value: select_family(v),
+                )
+                if active:
+                    b.props('unelevated no-caps rounded-full '
+                            'color=primary size=sm')
+                else:
+                    b.props('flat no-caps rounded-full '
+                            'color=primary size=sm')
+
+    @ui.refreshable
+    def lists_panel():
+        all_lists = get_wishlists()
+        counts = get_item_counts()
+        query = _norm_search(search_input.value if search_input else '')
+        selected = selected_family['value']
+        visible = [
+            w for w in all_lists
+            if _family_matches(w, selected)
+            and _wishlist_matches_search(w, query)
+        ]
+
+        if not visible:
+            with ui.column().classes(
+                'w-full items-center justify-center py-14 gap-3 px-2'
+            ):
+                ui.icon('search_off').classes('text-6xl text-slate-300')
+                t = ui.label('Aucune liste ne correspond à ce filtre') \
+                    .classes('text-lg font-semibold text-center')
+                t.style('color: #334155 !important;')
+                s = ui.label(
+                    'Essayez une autre famille ou effacez la recherche.'
+                ).classes('text-sm text-center max-w-md')
+                s.style('color: #64748b !important;')
+                ui.button('Réinitialiser les filtres', icon='filter_alt_off',
+                          on_click=reset_filters) \
+                    .props('flat no-caps rounded-full color=primary')
+            return
+
+        with ui.element('div').classes(
+            'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 '
+            'gap-4 md:gap-6 w-full auto-rows-fr'
+        ):
+            for w in visible:
+                render_wishlist_card(
+                    w, counts.get(w['id'], 0), edit_list)
 
     with page_container():
         # [MOBILE] titre + boutons adaptatifs
@@ -933,55 +1360,94 @@ def home():
                                'no-caps')
             return
 
-        counts = get_item_counts()
+        # Barre de filtres : recherche libre + familles.
         with ui.element('div').classes(
-            'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 '
-            'gap-4 md:gap-6 w-full auto-rows-fr'
+            'soft-card w-full px-3 md:px-4 py-3 mb-1'
         ):
-            for w in wishlists:
-                render_wishlist_card(w, counts.get(w['id'], 0))
+            with ui.row().classes('w-full items-center gap-2 flex-wrap'):
+                search_input = ui.input(
+                    placeholder='Rechercher une liste (titre, famille…)',
+                    on_change=lambda e: lists_panel.refresh(),
+                ).props('outlined rounded dense clearable debounce=250 '
+                        'prepend-icon=search') \
+                    .classes('w-full md:max-w-sm')
+            family_bar()
+        lists_panel()
 
 
-def render_wishlist_card(w, item_count):
+def render_wishlist_card(w, item_count, on_edit):
     is_internal = w['type'] == 'internal'
     color = w.get('color') or 'indigo'
 
     card = ui.element('div').classes(
         'soft-card hover-lift overflow-hidden flex flex-col '
-        'h-full cursor-pointer'
+        'h-full relative'
     )
-    card.on('click',
-            lambda wid=w['id'], url=w['url'], internal=is_internal:
-                _open_wishlist(wid, url, internal))
 
     with card:
-        band = ui.element('div').classes(
-            'px-4 md:px-5 py-5 md:py-6 flex items-center gap-3'
-        )
-        apply_gradient(band, color)
-        with band:
-            render_visual(w.get('emoji'), emoji_class='text-4xl',
-                          img_class='w-12 h-12')
-            t = ui.label(w['title']).classes(
-                'text-lg font-bold line-clamp-1 min-w-0 flex-1')
-            t.style('color: #ffffff !important;')
+        # Zone cliquable séparée du crayon : un clic sur l'icône ne
+        # déclenche donc pas l'ouverture de la liste.
+        with ui.element('div').classes(
+            'flex flex-col h-full w-full cursor-pointer'
+        ) as clickable:
+            clickable.on(
+                'click',
+                lambda wid=w['id'], url=w['url'], internal=is_internal:
+                    _open_wishlist(wid, url, internal))
 
-        with ui.column().classes('p-4 flex-1 justify-end'):
-            with ui.row().classes(
-                'w-full items-center justify-between'
-            ):
-                if is_internal:
-                    m = ui.label(
-                        f'{item_count} cadeau'
-                        f'{"x" if item_count != 1 else ""}'
-                    ).classes('text-xs font-medium')
-                    m.style('color: #94a3b8 !important;')
-                else:
-                    m = ui.label("Lien vers un autre site").classes(
-                        'text-xs font-medium')
-                    m.style('color: #94a3b8 !important;')
-                ui.icon('arrow_forward' if is_internal
-                        else 'open_in_new').classes('text-indigo-500')
+            band = ui.element('div').classes(
+                'px-4 md:px-5 py-5 md:py-6 pr-12 md:pr-14 '
+                'flex items-center gap-3'
+            )
+            apply_gradient(band, color)
+            with band:
+                render_visual(w.get('emoji'), emoji_class='text-4xl',
+                              img_class='w-12 h-12')
+                t = ui.label(w['title']).classes(
+                    'text-lg font-bold line-clamp-1 min-w-0 flex-1')
+                t.style('color: #ffffff !important;')
+
+            with ui.column().classes('p-4 flex-1 justify-end gap-2'):
+                # Familles autorisées à voir la liste.
+                with ui.row().classes('gap-1 flex-wrap'):
+                    families = _wishlist_families(w)
+                    if families:
+                        for name in families:
+                            ui.label(name).classes(
+                                'text-[10px] font-medium px-2 py-0.5 '
+                                'rounded-full bg-indigo-50 text-indigo-600'
+                            )
+                    else:
+                        ui.label('Toutes les familles').classes(
+                            'text-[10px] font-medium px-2 py-0.5 '
+                            'rounded-full bg-slate-100 text-slate-500'
+                        )
+
+                with ui.row().classes(
+                    'w-full items-center justify-between'
+                ):
+                    if is_internal:
+                        m = ui.label(
+                            f'{item_count} cadeau'
+                            f'{"x" if item_count != 1 else ""}'
+                        ).classes('text-xs font-medium')
+                        m.style('color: #94a3b8 !important;')
+                    else:
+                        m = ui.label("Lien vers un autre site").classes(
+                            'text-xs font-medium')
+                        m.style('color: #94a3b8 !important;')
+                    ui.icon('arrow_forward' if is_internal
+                            else 'open_in_new').classes('text-indigo-500')
+
+        edit_btn = ui.button(icon='edit', on_click=lambda: on_edit(w))
+        edit_btn.props(
+            'flat round dense size=sm aria-label="Modifier la liste"')
+        edit_btn.classes('absolute top-2.5 right-2.5 z-20')
+        edit_btn.style(
+            'color: #1e293b !important; '
+            'background-color: rgba(255, 255, 255, .92) !important; '
+            'box-shadow: 0 1px 4px rgba(15, 23, 42, .25) !important;')
+        edit_btn.tooltip('Modifier les paramètres de la liste')
 
 
 # ============================================================
@@ -994,6 +1460,7 @@ def add_page():
     render_header('Nouvelle liste', back_url='/')
 
     color_state, render_picker, get_color = color_picker('indigo')
+    known_families = get_all_families()
 
     with page_container():
         with ui.element('div').classes(
@@ -1023,6 +1490,26 @@ def add_page():
             visual_in = ui.input(
                 placeholder='🎁 ou https://...') \
                 .props('outlined rounded').classes('w-full')
+
+            ui.separator().classes('my-6')
+
+            # --- Familles autorisées à voir la liste ---
+            with ui.row().classes('items-center gap-2'):
+                ui.icon('family_restroom').classes('text-indigo-500')
+                lb_f = ui.label('Familles autorisées').classes(
+                    'text-sm font-semibold')
+                lb_f.style('color: #334155 !important;')
+            hint_f = ui.label(
+                'Choisissez les familles qui peuvent voir cette liste. '
+                'Aucune sélection = visible par tout le monde. '
+                'Tapez un nom puis Entrée pour créer une nouvelle famille.'
+            ).classes('text-xs mb-3 break-words')
+            hint_f.style('color: #64748b !important;')
+            family_select = ui.select(
+                known_families, multiple=True, value=[],
+                label='Familles', new_value_mode='add-unique',
+            ).props('outlined rounded use-chips clearable') \
+                .classes('w-full')
 
             ui.separator().classes('my-6')
 
@@ -1107,6 +1594,7 @@ def add_page():
                     hash_password(password.value),
                     get_color(),
                     (visual_in.value or '').strip() or None,
+                    families=family_select.value,
                 )
                 app.storage.user[f'admin_wl_{wid}'] = True
                 ui.notify('Liste créée ! Mode édition activé.',
@@ -1381,6 +1869,11 @@ def render_admin_wishlist_row(w, item_count, refresh_fn):
                     f"cadeau{'x' if item_count != 1 else ''}") \
                     .classes('text-xs')
                 m.style('color: #64748b !important;')
+                fams = _wishlist_families(w)
+                fam_label = ui.label(
+                    'Familles : ' + (', '.join(fams) if fams else 'toutes')
+                ).classes('text-xs break-words')
+                fam_label.style('color: #64748b !important;')
                 with ui.row().classes(
                     'gap-2 flex-wrap items-center mt-1'
                 ):
@@ -1518,147 +2011,12 @@ def wishlist_page(wid: int):
         b.classes('shadow-md')
 
     async def edit_wishlist_dialog():
-        # [MOBILE] largeur plafonnée
-        with ui.dialog() as dialog, ui.card().classes(
-            'w-[520px] max-w-[calc(100vw-1rem)] p-4 md:p-6 rounded-2xl '
-            'max-h-[90vh] overflow-y-auto'
-        ):
-            t0 = ui.label('Modifier la liste').classes(
-                'text-lg font-bold mb-4')
-            t0.style('color: #1e293b !important;')
-            t = ui.input('Titre', value=w['title']) \
-                .props('outlined rounded').classes('w-full')
-            d = ui.textarea('Description',
-                            value=w.get('description') or '') \
-                .props('outlined rounded').classes('w-full mt-3')
-            u = ui.input('URL (si externe)',
-                         value=w.get('url') or '') \
-                .props('outlined rounded').classes('w-full mt-3')
-
-            lb_e = ui.label('Émoji ou URL d\'image').classes(
-                'text-sm font-semibold mt-4 mb-2')
-            lb_e.style('color: #334155 !important;')
-            visual_in = ui.input(placeholder='🎁 ou https://...',
-                                 value=w.get('emoji') or '') \
-                .props('outlined rounded').classes('w-full')
-
-            lb = ui.label('Couleur').classes(
-                'text-sm font-semibold mt-4 mb-2')
-            lb.style('color: #334155 !important;')
-            _, render_picker, get_color = color_picker(
-                w.get('color') or 'indigo')
-            render_picker(size='w-8 h-8')
-
-            # --- Mot de passe d'édition (comme à la création) ---
-            ui.separator().classes('my-4')
-            lb_pw = ui.label("Mot de passe d'édition").classes(
-                'text-sm font-semibold mb-2')
-            lb_pw.style('color: #334155 !important;')
-            if w.get('password'):
-                st_pw = ui.label(
-                    'Un mot de passe est défini. Laissez les champs '
-                    'vides pour le conserver.')
-            else:
-                st_pw = ui.label(
-                    "Aucun mot de passe défini : la personne pourra en "
-                    "choisir un en passant en mode édition.")
-            st_pw.classes('text-xs mb-3 break-words')
-            st_pw.style('color: #64748b !important;')
-
-            new_pwd = ui.input('Nouveau mot de passe', password=True,
-                               password_toggle_button=True) \
-                .props('outlined rounded').classes('w-full')
-            new_pwd2 = ui.input('Confirmer le nouveau mot de passe',
-                                password=True,
-                                password_toggle_button=True) \
-                .props('outlined rounded').classes('w-full mt-3')
-            pw_hint = ui.label('').classes('text-xs h-4 mt-1')
-
-            def check_pw_match(e=None):
-                v1 = new_pwd.value or ''
-                v2 = new_pwd2.value or ''
-                if not v2:
-                    pw_hint.text = ''
-                    pw_hint.style('color: transparent;')
-                elif v1 == v2:
-                    pw_hint.text = '✓ Les mots de passe correspondent'
-                    pw_hint.style('color: #10b981 !important;')
-                else:
-                    pw_hint.text = '✗ Les mots de passe ne correspondent pas'
-                    pw_hint.style('color: #ef4444 !important;')
-
-            new_pwd.on_value_change(check_pw_match)
-            new_pwd2.on_value_change(check_pw_match)
-
-            async def delete_wishlist_dialog():
-                # [MOBILE] largeur plafonnée
-                with ui.dialog() as confirm, ui.card().classes(
-                    'w-96 max-w-[calc(100vw-2rem)] p-4 md:p-6 rounded-2xl'
-                ):
-                    t1 = ui.label('Supprimer cette liste ?').classes(
-                        'text-lg font-bold')
-                    t1.style('color: #1e293b !important;')
-                    s1 = ui.label('Cette action est irréversible.') \
-                        .classes('text-sm mb-4')
-                    s1.style('color: #64748b !important;')
-                    with ui.row().classes('w-full justify-end gap-2'):
-                        ui.button('Annuler',
-                                  on_click=lambda:
-                                      confirm.submit(False)) \
-                            .props('flat rounded-lg color=grey-7')
-                        ui.button('Supprimer',
-                                  on_click=lambda:
-                                      confirm.submit(True)) \
-                            .props('unelevated rounded-lg color=negative')
-                if await confirm:
-                    delete_wishlist(wid)
-                    app.storage.user.pop(admin_key, None)
-                    ui.navigate.to('/')
-
-            def save():
-                title_value = (t.value or '').strip()
-                if not title_value:
-                    ui.notify('Titre requis', type='negative')
-                    return
-                p1 = new_pwd.value or ''
-                p2 = new_pwd2.value or ''
-                if p1 or p2:
-                    if not p1:
-                        ui.notify('Nouveau mot de passe requis',
-                                  type='negative')
-                        return
-                    if p1 != p2:
-                        ui.notify('Les mots de passe ne correspondent pas',
-                                  type='negative')
-                        return
-                update_wishlist(
-                    wid, title_value, title_value,
-                    d.value.strip() or None,
-                    u.value.strip() or None,
-                    get_color(),
-                    (visual_in.value or '').strip() or None)
-                if p1:
-                    set_wishlist_password(wid, hash_password(p1))
-                dialog.submit(True)
-
-            # [MOBILE] boutons wrap ; le pied reste visible pendant
-            # le défilement du formulaire.
-            with ui.row().classes(
-                'wl-dialog-footer w-full justify-between items-center '
-                'mt-6 pt-3 flex-wrap gap-2'
-            ):
-                ui.button('Supprimer', icon='delete',
-                          on_click=delete_wishlist_dialog) \
-                    .props('flat rounded-lg color=negative')
-                with ui.row().classes('gap-2 flex-wrap'):
-                    ui.button('Annuler',
-                              on_click=lambda: dialog.submit(None)) \
-                        .props('flat rounded-lg color=grey-7')
-                    ui.button('Enregistrer', on_click=save) \
-                        .props('unelevated rounded-lg color=primary')
-
-        if await dialog:
+        result = await open_edit_wishlist_dialog(w)
+        if result == 'saved':
             ui.navigate.to(f'/wishlist/{wid}')
+        elif result == 'deleted':
+            app.storage.user.pop(admin_key, None)
+            ui.navigate.to('/')
 
     @ui.refreshable
     def page_body():
