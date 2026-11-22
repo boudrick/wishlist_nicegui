@@ -53,7 +53,11 @@ HEAD_HTML = '''
   }
   .wl-item-title { order: 1; }
   .wl-item-media { order: 2; }
-  .wl-item-desc { order: 3; }
+  .wl-item-desc {
+    order: 3;
+    /* Les retours à la ligne saisis dans le formulaire sont conservés. */
+    white-space: pre-line;
+  }
   .wl-item-links {
     order: 4;
     display: flex;

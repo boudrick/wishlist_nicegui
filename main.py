@@ -80,14 +80,18 @@ def _wishlist_families(w):
 
 
 def _family_matches(w, family):
-    """Une liste sans famille est visible par toutes les familles."""
+    """Filtre d'accueil par famille.
+
+    Sans famille sélectionnée (« Toutes »), toutes les listes sont
+    visibles. Dès qu'une famille est sélectionnée, seules les listes
+    rattachées à cette famille sont affichées : les listes sans famille
+    n'apparaissent plus dans ce filtre.
+    """
     if not family:
         return True
-    families = _wishlist_families(w)
-    if not families:
-        return True
     wanted = family.casefold()
-    return any(f.casefold() == wanted for f in families)
+    return any(f.casefold() == wanted
+               for f in _wishlist_families(w))
 
 
 def _read_family_filter():
@@ -867,8 +871,10 @@ def render_item(it, is_admin, refresh_fn, color, categories,
 
             if it.get('description'):
                 d = ui.label(it['description']).classes(
-                    'wl-item-desc text-sm break-words leading-snug')
-                d.style('color: #334155 !important;')
+                    'wl-item-desc text-sm break-words leading-snug '
+                    'whitespace-pre-line')
+                d.style('color: #334155 !important; '
+                        'white-space: pre-line !important;')
 
             if has_links:
                 with ui.column().classes('wl-item-links'):
@@ -1069,9 +1075,10 @@ async def open_edit_wishlist_dialog(w):
                     'text-sm font-semibold')
                 lb_f.style('color: #334155 !important;')
             hint_f = ui.label(
-                'Seules ces familles verront la liste sur l’accueil. '
-                'Aucune sélection = visible par tout le monde. '
-                'Tapez un nom puis Entrée pour créer une nouvelle famille.'
+                'Choisissez les familles qui peuvent voir cette liste. '
+                'Sans famille, la liste n’apparaît que dans le filtre '
+                '« Toutes ». Tapez un nom puis Entrée pour créer une '
+                'nouvelle famille.'
             ).classes('text-xs mb-3 break-words')
             hint_f.style('color: #64748b !important;')
             family_select = ui.select(
@@ -1418,7 +1425,7 @@ def render_wishlist_card(w, item_count, on_edit):
                                 'rounded-full bg-indigo-50 text-indigo-600'
                             )
                     else:
-                        ui.label('Toutes les familles').classes(
+                        ui.label('Sans famille').classes(
                             'text-[10px] font-medium px-2 py-0.5 '
                             'rounded-full bg-slate-100 text-slate-500'
                         )
@@ -1501,8 +1508,9 @@ def add_page():
                 lb_f.style('color: #334155 !important;')
             hint_f = ui.label(
                 'Choisissez les familles qui peuvent voir cette liste. '
-                'Aucune sélection = visible par tout le monde. '
-                'Tapez un nom puis Entrée pour créer une nouvelle famille.'
+                'Sans famille, la liste n’apparaît que dans le filtre '
+                '« Toutes ». Tapez un nom puis Entrée pour créer une '
+                'nouvelle famille.'
             ).classes('text-xs mb-3 break-words')
             hint_f.style('color: #64748b !important;')
             family_select = ui.select(
@@ -1871,7 +1879,7 @@ def render_admin_wishlist_row(w, item_count, refresh_fn):
                 m.style('color: #64748b !important;')
                 fams = _wishlist_families(w)
                 fam_label = ui.label(
-                    'Familles : ' + (', '.join(fams) if fams else 'toutes')
+                    'Familles : ' + (', '.join(fams) if fams else 'aucune')
                 ).classes('text-xs break-words')
                 fam_label.style('color: #64748b !important;')
                 with ui.row().classes(
@@ -2105,9 +2113,11 @@ def wishlist_page(wid: int):
                                 if w.get('description'):
                                     d = ui.label(
                                         w['description']).classes(
-                                            'mt-1 break-words')
+                                            'mt-1 break-words '
+                                            'whitespace-pre-line')
                                     d.style(
-                                        'color: #334155 !important;')
+                                        'color: #334155 !important; '
+                                        'white-space: pre-line !important;')
                         if is_admin:
                             ui.button(
                                 icon='edit',
